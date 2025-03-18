@@ -2,20 +2,18 @@
 from base.BCI2000Connection import BCI2000Instance, BCI2000Worker
 from base.AcquireDataThread import AcquireDataThread
 from PyQt5.QtCore import QThread, pyqtSignal
-from pyqtgraph.dockarea import *
 import pyqtgraph as pg
 from PyQt5.QtCore import pyqtSignal
-from base.SharedVisualization import Window, MyDockArea, TextOutput
+from base.SharedVisualization import Group
 
 #master class that handles communication between threads and filters
 #is inherited by every filter in "filters" folder
-class MasterFilter(Window):
+class MasterFilter(Group):
   chNamesSignal = pyqtSignal(list)
   dataProcessedSignal = pyqtSignal(object) #1D array: size=channels
-  def __init__(self, **kargs):
-    super().__init__(**kargs)
+  def __init__(self, area):
+    super().__init__(area)
   def publish(self):
-    super().publish()
     #BCI2000
     self.t1 = QThread()
     self.bci = BCI2000Instance('C:/bci2000.x64/prog')
@@ -40,13 +38,6 @@ class MasterFilter(Window):
     self.acqThr.logPrint.connect(self.logPrint)
     #self.acqThr.disconnected.connect(self.dataThreadDisconnected) #will start again when connected again
 
-    #GUI
-    self.area = MyDockArea()
-    self.setCentralWidget(self.area)
-    #create log to inform user as we set things up
-    self.output = TextOutput()
-    self.area.addDock(Dock("Log", widget=self.output))
-
     #holds all parameters setn by signal sharing
     self.parameters = {}
 
@@ -66,12 +57,13 @@ class MasterFilter(Window):
     self.t1.wait()
     self.t2.wait()
 
-  def closeEvent(self, event): #overrides QMainWindow closeEvent
-    self.stop()
-    #self.localConfig.save(self)
-    #self.close()
-    super().closeEvent(event)
-    event.accept()
+  # def closeEvent(self, event): #overrides QMainWindow closeEvent
+  #   print("filter close event")
+  #   self.stop()
+  #   #self.localConfig.save(self)
+  #   #self.close()
+  #   super().closeEvent(event)
+  #   event.accept()
 
   def setConfig(self):
     self.logPrint(f'Acquired: ch: {self.channels}, el: {self.elements}')
@@ -117,5 +109,5 @@ class MasterFilter(Window):
   def messageReceived(self, msg):
     print(msg)
   def logPrint(self, msg):
-    self.output.append(">>" + msg)
-    self.output.moveCursor(pg.QtGui.QTextCursor.End)
+    self.win.output.append(">>" + msg)
+    self.win.output.moveCursor(pg.QtGui.QTextCursor.End)

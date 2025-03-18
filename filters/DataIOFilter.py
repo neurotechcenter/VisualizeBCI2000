@@ -1,11 +1,11 @@
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
-from base.GridFilter import GridFilter
+from filters.filterBase.GridFilter import GridFilter
 
 #barebones default visualization
 class DataIOFilter(GridFilter):
-  def __init__(self):
-    super().__init__()
+  def __init__(self, area):
+    super().__init__(area)
   def publish(self):
     super().publish()
     self.area.addDock(Dock("button", widget=pg.QtWidgets.QPushButton("push")))

@@ -5,7 +5,7 @@ from pyqtgraph.dockarea import *
 import pyqtgraph.opengl as gl
 import scipy.io
 
-from base.SharedVisualization import Window, MyDockArea, TextOutput
+from base.SharedVisualization import Window, MyDockArea, TextOutput, Group
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 import threading
 
@@ -104,22 +104,29 @@ class BrainInitWorker(QObject):
 
 #main window displaying 3d information in real-time
 #updating is handled by master, updates when dataProcessedSignal is called 
-class BrainWindow(Window):
-  def __init__(self):
-    super().__init__()
+class BrainWindow(Group):
+  class MyViewWidget(gl.GLViewWidget):
+    def __init__(self, myParent, parent=None, devicePixelRatio=None, rotationMethod='euler'):
+      super().__init__(parent, devicePixelRatio, rotationMethod)
+      self.myParent = myParent
+      self.loaded = False
+    def mousePressEvent(self, event):
+      if not self.loaded:
+        #load brain
+        print("LOAD BRAIN")
+        self.loaded = self.myParent.loadBrain()
+  
+  def __init__(self, area):
+    super().__init__(area)
   def publish(self):
     super().publish()
-    self.loaded = False
     self.activeEls = {}
     self.loadLock = threading.Lock()
     self.configLock = threading.Lock()
-    self.area = MyDockArea()
-    self.setCentralWidget(self.area)
-    self.optionsD = Dock("Options")
-
+    self.layout = pg.LayoutWidget()
+    #self.optionsD = Dock("Options")
     self.loadBut = pg.QtWidgets.QPushButton("Load brain")
     self.loadBut.clicked.connect(self.loadBrain)
-    self.optionsD.addWidget(self.loadBut, colspan=2)
 
     #scale slider to scale how much we change the radius of electrodes
     #slider is index to use for scaleMap (1-100%)
@@ -127,8 +134,6 @@ class BrainWindow(Window):
     self.scaleSlider.setMaximum(99)
     self.scaleSlider.setMinimum(0)
     self.scaleSlider.valueChanged.connect(self.changeScale)
-    self.optionsD.addWidget(self.scaleSlider, row=1, col=1)
-    self.optionsD.addWidget(pg.QtWidgets.QLabel("Scaling Factor", objectName="h2"), row=1, col=0)
     self.scaleMap = np.linspace(1e-3, 80e-3, 100)
 
     self.themes = [ColorScheme('black', [1,1,1,1], [0.3, 0.3, 0.3, 1]), #dark
@@ -136,22 +141,35 @@ class BrainWindow(Window):
     self.themeBut = pg.QtWidgets.QPushButton("Toggle light/dark mode")
     self.themeBut.setCheckable(True)
     self.themeBut.clicked.connect(self.toggleTheme)
-    self.optionsD.addWidget(self.themeBut, row=2, colspan=2)
+
+    #initialize brain view
+    self.viewWidget = self.MyViewWidget(self, rotationMethod='quaternion')
+    self.viewWidget.setCameraPosition(distance=200)
+    self.layout.addWidget(self.viewWidget, rowspan=6, colspan=6)
+
+    self.layout.addWidget(self.loadBut, row=7, col=0, colspan=3)
+    self.layout.addWidget(self.themeBut, row=7, col=3, colspan=3)
+    self.layout.addWidget(pg.QtWidgets.QLabel("Scaling Factor", objectName="h2"), row=8, col=0, colspan=1)
+    self.layout.addWidget(self.scaleSlider, row=8, col=1, colspan=5)
+
+    #self.area.addDock(Dock("Brain", widget=self.viewWidget), position='above', relativeTo=self.optionsD)
+
+    #add text to tell user to load brain
+    # griditem = gl.GLGridItem()
+    # griditem.setSize(100, 100)
+    # griditem.setSpacing(10, 10)
+    # self.viewWidget.addItem(griditem)
+    self.insrtTxt = gl.GLTextItem(pos=(-30, 0, 0), text="Click to load VERA brain")
+    self.viewWidget.addItem(self.insrtTxt)
 
     #add dock
-    self.area.addDock(self.optionsD)
-    #initialize brain view
-    self.viewWidget = gl.GLViewWidget(rotationMethod='quaternion')
-    self.viewWidget.setCameraPosition(distance=200)
-    self.area.addDock(Dock("Brain", widget=self.viewWidget))
+    self.dock = Dock("Brain", widget=self.layout)
+    self.area.addDock(self.dock)
 
-    #create log
-    self.output = TextOutput()
-    self.area.addDock(Dock("Log", widget=self.output))
 
   def loadBrain(self):
     #ask for file name
-    file_dialog = pg.QtWidgets.QFileDialog(self)
+    file_dialog = pg.QtWidgets.QFileDialog()
     file_dialog.setWindowTitle("Open File")
     file_dialog.setFileMode(pg.QtWidgets.QFileDialog.FileMode.ExistingFile)
     file_dialog.setViewMode(pg.QtWidgets.QFileDialog.ViewMode.Detail)
@@ -160,53 +178,31 @@ class BrainWindow(Window):
       #create progress bar
       self.progBar = pg.QtWidgets.QProgressBar()
       self.progBar.setValue(10)
-      self.optionsD.addWidget(self.progBar, colspan=2)
+      self.layout.addWidget(self.progBar, row=9, col=0, colspan=6)
       selected_files = file_dialog.selectedFiles()
     else:
       #file not chosen
-      return
+      return False
 
     #file has been chosen
+    self.insrtTxt.setVisible(False)
     #load brain
     self.radius = 1
     self.t = QThread()
     print(selected_files[0])
-    self.w = BrainWorker(selected_files[0], self.radius, self.loadLock)
+    self.w = BrainWorker(selected_files[0], self.radius)
     self.w.moveToThread(self.t)
     self.t.started.connect(self.w.run)
     self.w.brainLoaded.connect(self.brainLoaded)
     self.w.elLoaded.connect(self.electrodesLoaded)
     self.w._progress.connect(self.progSignalAccept)
     self.t.start()
-    self.loadBut.setEnabled(False)
-    #QApplication.setOverrideCursor(pg.QtCore.Qt.BusyCursor)
-    
-    #prepare for initialization
-    self.t2 = QThread()
-    self.w2 = BrainInitWorker(self.loadLock, self.configLock)
-    self.w2.moveToThread(self.t2)
-    self.w2.finished.connect(self.readyForConfig)
-    self.t2.started.connect(self.w2.run)
-    self.t2.start()
-  
-  def closeEvent(self, event):
-    if not self.loadBut.isEnabled():
-      self.t.quit()
-      self.t2.quit()
-      if self.configLock.locked():
-        self.configLock.release()
-      if self.loadLock.locked():
-        self.loadLock.release()
-      #wait for both threads to exit
-      self.t.wait()
-      self.t2.wait()
-      print("all brain threads closed")
-    super().closeEvent(event)
+    return True
 
   def toggleTheme(self, checked):
     self._theme = checked
     self.colorScene()
-  
+
   def colorScene(self):
     self.viewWidget.setBackgroundColor(self.themes[self._theme].backgroundC)
     if hasattr(self, 'w'):
@@ -253,12 +249,19 @@ class BrainWindow(Window):
     for el in elMeshes:
       self.viewWidget.addItem(elMeshes[el])
       elMeshes[el].setColor(self.themes[self._theme].elDynamicC)
-  
-  def logPrint(self, msg):
-    self.output.append(">>" + msg)
-    self.output.moveCursor(pg.QtGui.QTextCursor.End)
+
+  def setConfig(self, chNames):
+    print("setting config")
+    self.chNames = chNames
+    if self.configLock.locked():
+      #first time we pressed set config
+      self.configLock.release()
+    elif not self.loadLock.locked():
+      #otherwise, if loaded, go directly to slot
+      self.readyForConfig()
   
   def readyForConfig(self):
+    print("READY FOR CONFIG")
     if not hasattr(self, 'chNames'):
       #we are quitting prematurely
       return
@@ -311,16 +314,8 @@ class BrainWindow(Window):
         self.activeEls[name].scale(self.radius/rad, self.radius/rad, self.radius/rad)
     self.prevRadius = np.ones(len(self.activeEls))*self.radius
 
-  def setConfig(self, chNames):
-    self.chNames = chNames
-    if self.configLock.locked():
-      #first time we pressed set config
-      self.configLock.release()
-    elif not self.loadLock.locked():
-      #otherwise, if loaded, go directly to slot
-      self.readyForConfig()
-
   def plot(self, data):
+    print("plotting brain...")
     if not self.activeEls:
       return
     for name, i in zip(self.activeEls, range(len(self.prevRadius))):

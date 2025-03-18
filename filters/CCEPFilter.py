@@ -4,7 +4,7 @@ from PyQt5 import QtWidgets
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
-from base.GridFilter import GridFilter
+from filters.filterBase.GridFilter import GridFilter
 from base.SharedVisualization import saveFigure
 
 backgroundColor = (14, 14, 14)
@@ -12,11 +12,11 @@ highlightColor = (60, 60, 40)
 highZValue = 1000
 
 class CCEPFilter(GridFilter):
-  def __init__(self):
-    super().__init__()
+  def __init__(self, area):
+    super().__init__(area)
   def publish(self):
     super().publish()
-    self.setWindowTitle("BCI2000 CCEPs")
+
     self.pens = [pg.mkPen(x) for x in np.linspace(0, 1, 256)] #create all the pens we could ever need
     self.gridNums = pg.GraphicsLayoutWidget(title="CCEP Aggregate")
     self.table = QtWidgets.QTableWidget()
@@ -99,10 +99,11 @@ class CCEPFilter(GridFilter):
     settingsD.addWidget(onsetLab, row=15, col=0)
     settingsD.addWidget(self.onsetSpin, row=16, col=0)
     settingsD.addWidget(clearButton, row=17, col=0)
-    self.area.addDock(settingsD)
 
     d2 = Dock("Total CCEPs", widget=self.table)
-    self.area.addDock(d2, 'left')
+    self.area.addDock(settingsD)
+    self.area.addDock(d2, position='above', relativeTo=settingsD)
+    self.area.addDock(Dock("Demo", widget=self.gridPlots), position='above', relativeTo=d2)
 
   def loadSettings(self):
     super().loadSettings()

@@ -6,6 +6,7 @@ def setStyle(obj):
   darkGrey = "#606060"
   darkEmphasis = "#0E0E0F"
   darkColor = "#091850"
+  lightColor = "rgb(94, 125, 237)"
   pg.setConfigOption("background", pg.mkColor("#1D1D1F"))
   obj.setStyleSheet(f"""
 ParameterTree {{
@@ -54,10 +55,11 @@ QCheckBox {{
 QProgressBar {{
     border: 1px solid white;
     text-align: center;
-    background-color: 	#606060;
+    background-color: {darkGrey};
     color: white;
     border-radius: 5px;
     padding: 2px;
+    margin: 5px;
 }}
 QProgressBar::chunk {{
     background-color: rgb(9, 24, 80);
@@ -82,7 +84,7 @@ QSlider::handle:horizontal {{
     padding: -20px 0px;
 }}
 QSlider::handle:horizontal:hover {{
-    background-color: rgb(94, 125, 237);
+    background-color:{lightColor};
 }}
 QSlider::handle:horizontal:pressed {{
     background-color: rgb(65, 255, 195);
@@ -108,6 +110,7 @@ QPushButton:hover {{
     margin: 5px;
 }}
 QPushButton:disabled {{background-color: grey; color: darkgrey;}}
+QPushButton:checked {{background-color: {lightColor}; margin: 15px; border-width: 0;}}
 QHeaderView {{
   background-color: {darkBackground};
   color: #f0f0f0;    

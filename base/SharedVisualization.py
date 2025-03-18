@@ -2,47 +2,69 @@
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
 import os
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, QObject
 from base.style import setStyle
+import traceback
+
+class Group(QObject):
+  def __init__(self, win):
+    super().__init__()
+    self.win = win
+    self.area = win.area
+    self.publish()
+    setStyle(win)
+    self.loadSettings()
+  def publish(self):
+    pass
+  def loadSettings(self):
+    #load unique settings to window
+    self.settings = pg.QtCore.QSettings("BCI2000", self.__class__.__name__)
+    # try:
+    #   self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
+    # except:
+    #   traceback.print_exc()
+  
+  def saveSettings(self):
+    pass
+    # if hasattr(self, 'area'):
+    #   self.settings.setValue("dockConfig", self.area.saveState())
+  def logPrint(self, msg):
+    self.win.output.append(">>" + msg)
+    self.win.output.moveCursor(pg.QtGui.QTextCursor.End)
+
 
 # main window inherited by all GUIs.
 # Children should call publish first to add GUI elements,
 # then the style will be set and settings will be loaded
 class Window(pg.QtWidgets.QMainWindow):
-  closed = pyqtSignal()
   def __init__(self, **kargs):
     super().__init__(**kargs)
-    self.publish() #load window
-    setStyle(self)
-    self.loadSettings() #set past config
-  
-  def publish(self):
-    pass
+    self.publish()
+    self.loadSettings()
     
   def closeEvent(self, event): #overrides QMainWindow closeEvent
     self.saveSettings()
-    self.closed.emit() #to let main window know we closed
     super().closeEvent(event)
     
   def loadSettings(self):
     #load unique settings to window
     self.settings = pg.QtCore.QSettings("BCI2000", self.__class__.__name__)
     self.restoreGeometry(self.settings.value("geometry", pg.QtCore.QByteArray()))
-    if hasattr(self, 'area'):
-      self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []})) #default dock
+    self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
   
   def saveSettings(self):
     self.settings.setValue("geometry", self.saveGeometry())
-    if hasattr(self, 'area'):
-      self.settings.setValue("dockConfig", self.area.saveState())
+    self.settings.setValue("dockConfig", self.area.saveState())
 
 #inherit DockArea just to keep style for floating docks
 class MyDockArea(DockArea):
   def __init__(self, parent=None, temporary=False, home=None):
     super().__init__(parent, temporary, home)
-  def floatDock(self, dock):
-    super().floatDock(dock)
-    setStyle(dock)
+
+  def addTempArea(self):
+    area = super().addTempArea()
+    setStyle(area)
+    return area
 
 #Style text output for log
 class TextOutput(pg.QtWidgets.QTextEdit):
