@@ -6,10 +6,17 @@ import pyqtgraph as pg
 from pyqtgraph.dockarea import *
 from filters.filterBase.GridFilter import GridFilter
 from base.SharedVisualization import saveFigure
+from enum import Enum
 
 backgroundColor = (14, 14, 14)
 highlightColor = (60, 60, 40)
 highZValue = 1000
+
+class Column(Enum):
+  Name = 0
+  Electrode = 1
+  Sig = 2
+  AUC = 3
 
 class CCEPFilter(GridFilter):
   def __init__(self, area):
@@ -169,30 +176,50 @@ class CCEPFilter(GridFilter):
 
       #process data
       aocs = []
-      i = 0
       processedData = np.zeros(np.shape(data))
-      for ch in self.chTable.values():
-      #for ch in self.chTable.values():
+      for i, ch in enumerate(self.chTable.values()):
         processedData[i] = ch.computeData(data[i]) #compute data
         aocs.append(ch.auc)
-        i+=1
+      
       #send processed data
       self.dataProcessedSignal.emit(aocs)
 
       #we scale by 10 cause slider can only do ints
-      t = np.std(aocs) * self._stds/10
-      #update table with new data
-      for ch in self.chTable.values():
-        ch.totalChanged(ch.auc > t)
-      #sort table with updated numbers
-      self.table.sortItems(0, QtCore.Qt.DescendingOrder)
+      self.aucThresh = np.std(aocs) * self._stds/10
+      # #update table with new data
+      # for ch in self.chTable.values():
+      #   ch.totalChanged(ch.auc > self.aucThresh)
+      
+      # #sort table with updated numbers, if toggled
+      # if self._sortChs:
+      #   self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
 
       #plot!
-      for i in range(0, self.windows):
-        chName = self.table.item(i, 0).text()
-        self.chPlot[i].plotData(chName, self.chTable[chName])
+      self.renderPlots()
 
       self.oldVal = newVal
+
+  def updateTable(self):
+    #update table with new data
+    for ch in self.chTable.values():
+      ch.totalChanged(ch.auc > self.aucThresh)
+    
+    #sort table with updated numbers, if toggled
+    if self._sortChs:
+      self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
+
+  def renderPlots(self, newData=True):
+    self.updateTable()
+    i = 0
+    for r in range(self.table.rowCount()):
+      if i == self.windows:
+        break
+      if not self.table.isRowHidden(r):
+        chName = self.table.item(r, Column.Name.value).text()
+        self.chPlot[i].changePlot(chName, self.chTable[chName])
+        if newData:
+          self.chPlot[i].plotData()
+        i+=1
 
   def changeBackgroundColor(self, row, emph):
     if row >= self.windows:
@@ -201,115 +228,115 @@ class CCEPFilter(GridFilter):
     if emph:
       c = highlightColor
     self.chPlot[row].vb.setBackgroundColor(c)
-    chName = self.table.item(row,0).text()
+    chName = self.table.item(row,Column.Name.value).text()
     self.chPlot[row].selected = emph
     self.chTable[chName].selected = emph
-      
+  
   def itemChanged(self):
-      items = self.table.selectedItems()
-      newRows = []
-      for p in items:
-          if p.row() not in self.selectedRows:
-              self.changeBackgroundColor(p.row(),True)
-          newRows.append(p.row())
-      for oldS in self.selectedRows:
-          if oldS not in newRows:
-              self.changeBackgroundColor(oldS, False)
-      self.selectedRows = newRows                
+    items = self.table.selectedItems()
+    newRows = []
+    for p in items:
+      if p.row() not in self.selectedRows:
+        self.changeBackgroundColor(p.row(),True)
+      newRows.append(p.row())
+    for oldS in self.selectedRows:
+      if oldS not in newRows:
+        self.changeBackgroundColor(oldS, False)
+    self.selectedRows = newRows
 
   def setConfig(self):
-      super().setConfig()
+    super().setConfig()
 
-      self.gridNums.clear()
+    self.gridNums.clear()
 
-      self.chPlot = list(range(self.channels))
-      self.chOrder = list(range(self.channels))
-      #self.chPlot = {}
-      self.chTable = {}
-      self.regs = list(range(self.channels))
-      #init variables
-      self.oldVal = 0
-      self.baselineLength = self.getParameterValue("BaselineEpochLength") #for now, assume ms
-      self.latStart = 0
-      self.latStartSamples = self._maskStart
-      self.ccepLength = self.getParameterValue("CCEPEpochLength")
-      self.sr = self.getParameterValue("SamplingRate")
-      if self.sr < 30:
-          self.sr = self.sr * 1000 #TODO: ugly hack if sampling rate is in kHz
-      self.baseSamples = self.msToSamples(self.baselineLength)
-      self.trigSamples = self._maskEnd 
-      self.trigLatLength = self.trigSamples * 1000.0 / self.sr
-      
-      self.x = np.linspace(-self.baselineLength, self.ccepLength, self.elements)
+    self.chPlot = list(range(self.channels))
+    self.chOrder = list(range(self.channels))
+    #self.chPlot = {}
+    self.chTable = {}
+    self.regs = list(range(self.channels))
+    #init variables
+    self.oldVal = 0
+    self.baselineLength = self.getParameterValue("BaselineEpochLength") #for now, assume ms
+    self.latStart = 0
+    self.latStartSamples = self._maskStart
+    self.ccepLength = self.getParameterValue("CCEPEpochLength")
+    self.sr = self.getParameterValue("SamplingRate")
+    if self.sr < 30:
+        self.sr = self.sr * 1000 #TODO: ugly hack if sampling rate is in kHz
+    self.baseSamples = self.msToSamples(self.baselineLength)
+    self.trigSamples = self._maskEnd 
+    self.trigLatLength = self.trigSamples * 1000.0 / self.sr
+    
+    self.x = np.linspace(-self.baselineLength, self.ccepLength, self.elements)
 
-      #to visualize stimulating channels if we can
-      self.stimChs = []
-      onsetPeriod = int(self.getParameterValue("OnsetPeriod"))
-      self.onsetSpin.setValue(onsetPeriod)
+    #to visualize stimulating channels if we can
+    self.stimChs = []
+    onsetPeriod = int(self.getParameterValue("OnsetPeriod"))
+    self.onsetSpin.setValue(onsetPeriod)
 
-      #go thru all channels for table
-      self.tableArray = []
-      count = 0
-      for chName in self.chNames:
-          sub1 = self.gridNums.addLayout()
-          sub1.addLabel("<b>%s"%(chName), size='20pt', bold=True)
-          #print(self.tableArray)
-          self.tableArray.append({
-              "Name": chName,
-              "Count": 0,
-              "AUC": 0
-          })
-          sub1.nextRow()
-          self.chTable[chName] = CCEPCalc(self, ch=count, title=chName)
-          count = count + 1
+    #go thru all channels for table
+    count = 0
+    for chName in self.chNames:
+      sub1 = self.gridNums.addLayout()
+      sub1.addLabel("<b>%s"%(chName), size='20pt', bold=True)
 
-      #only initialize plots up to max number 
-      for r in range(self.numRows):
-        for c in range(self.numColumns):
-          ch = r*self.numColumns+c
-          #print(self.chPlot)
-          if ch < self.windows:
-            chName = self.chNames[ch]
-            self.chOrder[ch] = chName
-            self.chPlot[ch] = CCEPPlot(self, title=chName, row=self.chTable[chName])
-            self.gridPlots.addItem(self.chPlot[ch])
-            if ch != 0:
-              self.chPlot[ch].setLink(self.chPlot[ch-1])
-        self.gridPlots.nextRow()
-      
-      if self.windows > 1:
-        self.chPlot[0].friend = self.chPlot[self.windows-1] #give first plot a friend
-      
-      #table
-      self.table.setRowCount(self.channels)
-      heads = ["Name", "Sig?", "AUC"]
-      self.table.setColumnCount(len(heads))
-      self.table.setHorizontalHeaderLabels(heads)
-      for i, name in enumerate(self.chNames):
-        n = MyTableWidgetItem(name, self.channels - i, self.channels) #save order as rank
-        s = MyTableWidgetItem(0)
-        a = MyTableWidgetItem(0)
-        self.table.setItem(i, 0, n)
-        self.table.setItem(i, 1, s)
-        self.table.setItem(i, 2, a)
-      self.table.resizeColumnsToContents()
-      #self.table.setData(self.tableArray)
-      #self.table.setSortMode(0,'index')
-      self.table.sortItems(0, QtCore.Qt.DescendingOrder)
-      count = 0
-      for chName in self.chNames:
-        self.chTable[chName].setTableItem(count)
-        count = count + 1
-      self.setSortChs(self._sortChs)
-      #make sure user can't change sorting
-      for i in range(self.table.columnCount()):
-        h = self.table.horizontalHeaderItem(i)
-        h.setFlags(h.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-        self.table.setHorizontalHeaderItem(i, h)
-      # print(self.table.horizontalHeaderItem(1).text())
-      self.selectedRows = []
-      #self.table.itemClicked.connect(self.tableItemClickedCallback)
-      self.table.itemSelectionChanged.connect(self.itemChanged)
+      sub1.nextRow()
+      self.chTable[chName] = CCEPCalc(self, ch=count, title=chName)
+      count = count + 1
+
+    #only initialize plots up to max number 
+    for r in range(self.numRows):
+      for c in range(self.numColumns):
+        ch = r*self.numColumns+c
+        #print(self.chPlot)
+        if ch < self.windows:
+          chName = self.chNames[ch]
+          self.chOrder[ch] = chName
+          self.chPlot[ch] = CCEPPlot(self, title=chName, row=self.chTable[chName])
+          self.gridPlots.addItem(self.chPlot[ch])
+          if ch != 0:
+            self.chPlot[ch].setLink(self.chPlot[ch-1])
+      self.gridPlots.nextRow()
+    
+    if self.windows > 1:
+      self.chPlot[0].friend = self.chPlot[self.windows-1] #give first plot a friend
+    
+    #table
+    self.table.setRowCount(self.channels)
+    self.table.setColumnCount(len(Column))
+    self.table.setHorizontalHeaderLabels([c.name for c in Column])
+    for i, name in enumerate(self.chNames):
+      n = MyTableWidgetItem(name, self.channels - i, self.channels) #save order as rank
+      s = MyTableWidgetItem(0)
+      a = MyTableWidgetItem(0)
+      if self.elecDict:
+        eName = self.elecDict[name]
+      else:
+        eName = ""
+      e = MyTableWidgetItem(eName)
+      self.table.setItem(i, Column.Name.value, n)
+      self.table.setItem(i, Column.Electrode.value, e)
+      self.table.setItem(i, Column.Sig.value, s)
+      self.table.setItem(i, Column.AUC.value, a)
+    if not self.elecDict:
+      self.table.setColumnHidden(Column.Electrode.value, True) #hide electrode name col
+    else:
+      self._hideNonElectrodes()
+    self.table.resizeColumnsToContents()
+    #self.table.setSortMode(0,'index')
+    self.table.sortItems(0, QtCore.Qt.DescendingOrder)
+    for i, chName in enumerate(self.chNames):
+      self.chTable[chName].setTableItem(i)
+    #self.setSortChs(self._sortChs)
+    #make sure user can't change sorting
+    for i in range(self.table.columnCount()):
+      h = self.table.horizontalHeaderItem(i)
+      #h.setFlags(h.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+      self.table.setHorizontalHeaderItem(i, h)
+    # print(self.table.horizontalHeaderItem(1).text())
+    self.selectedRows = []
+    #self.table.itemClicked.connect(self.tableItemClickedCallback)
+    self.table.itemSelectionChanged.connect(self.itemChanged)
 
   def setStdDevState(self, value):
     self._stds = value
@@ -321,7 +348,16 @@ class CCEPFilter(GridFilter):
   def setAvgPlots(self, state):
     self._avgPlots = state
   def setSortChs(self, state):
+    if self._sortChs and not state:
+      #re-initialize order
+      for ch in self.chTable.values():
+        ch.totalChanged(False)
+      self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
+    
     self._sortChs = state
+    #plot everything again with original order
+    if hasattr(self, 'chTable'):
+      self.renderPlots(newData=False)
   def setSaveFigs(self, state):
     self._saveFigs = state
 
@@ -383,12 +419,37 @@ class CCEPFilter(GridFilter):
   def saveFigures(self):
     saveFigure(self.print, self.bciThread.savePath, self.gridPlots, '_CCEPs', '.svg')
 
+  ####---inherited slots---####
+  def acceptElecNames(self, elecDict):
+    super().acceptElecNames(elecDict)
+    if hasattr(self, 'chTable'):
+      for name in self.chNames:
+        r = self.table.row(self.chTable[name].tableItem)
+        self.table.item(r,Column.Electrode.value).setData(QtCore.Qt.DisplayRole, self.elecDict[name])
+      self.table.setColumnHidden(Column.Electrode.value, False)
+      self._hideNonElectrodes()
+    else:
+      #we haven't initialized table yet
+      pass
+  
+  #if we have electrode names, we can hide channels that aren't electrodes
+  def _hideNonElectrodes(self):
+    if self.elecDict and hasattr(self, 'chTable'):
+      for r in range(self.table.rowCount()):
+        if self.table.item(r,Column.Electrode.value).text() == "":
+          self.table.setRowHidden(r, True)
+        else:
+          self.table.setRowHidden(r, False)
+
+
 class MyTableWidgetItem(QtWidgets.QTableWidgetItem):
   def __init__(self, parent=None, rank=0, maxVal=0):
     QtWidgets.QTableWidgetItem.__init__(self, parent)
     self.rank = rank
     self.sig = 0
     self.max = maxVal
+    #make un-editable
+    self.setFlags(self.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
   #define less than (<) operator for table sorting
   def __lt__(self, b):
     return (self.rank + self.sig*self.max) < (b.rank + b.sig*b.max)
@@ -440,31 +501,17 @@ class CCEPPlot(pg.PlotItem):
       self.p.updateParameter(self.latLow, self.latHigh) 
       self.friend.latReg.setRegion(reg.getRegion())
 
-  #plot: new name and link is only considered if we are dynamically sorting
-  def plotData(self, name, link):
-    children = self.listDataItems() #all plots
+  def changePlot(self, name, link):
     #have we changed channels
     if self.name != name:
       self.setTitle(name)
       self.name = name
       self.link = link #update link
-      plotNum = len(self.link.database) - 1
-      #simply change, except for average plot
-      expColors = [(255) * (1 - 2**(-x)) for x in np.linspace(0+1/(plotNum+1), 1-1/(plotNum+1), plotNum)]
-      for f, d, p in zip(children[1:], self.link.database[:-1], expColors):
-        f.setData(x=self.p.x, y=d, useCache=True, pen=self.p.pens[int(p)])
-      # #now add
-      # expColors = [(255) * (1 - 2**(-x)) for x in np.linspace(0+1/(len(self.link.database)+1), 1-1/(len(self.link.database)+1), len(self.link.database))]
-      # for f, d, p in zip(self.listDataItems(), self.link.database, expColors):
-      #   f.setData(x=self.p.x, y=d, useCache=True, pen=self.p.pens[int(p)])
-      
-      # #channel has changed, need to re-plot everything
-      # for child in self.listDataItems():
-      #   self.removeItem(child)
-      # #TODO: use multiDataPlot for more efficient plotting, figure out pens
-      # #self.multiDataPlot(x=self.p.x, y=self.link.database)
-      # for d, p in zip(self.link.database, expColors):
-      #   self.plot(x=self.p.x, y=d, useCache=True, pen=self.p.pens[int(p)])
+      if len(self.link.database) > 0:
+        #change data of all plots but average
+        for f, d in zip(self.listDataItems()[1:], self.link.database):
+          f.setData(x=self.p.x, y=d, useCache=True)
+
       #change background based on selected
       if self.selected and not self.link.selected:
         self.vb.setBackgroundColor(backgroundColor)
@@ -472,31 +519,8 @@ class CCEPPlot(pg.PlotItem):
       elif not self.selected and self.link.selected:
         self.vb.setBackgroundColor(highlightColor)
         self.selected = True
-    else:
-      #update colors for old plots
-      # if self.link.averaged and np.size(children) > 0:
-      #   #remove average plot
-      #   self.removeItem(children[-1]) #average should be most recent one
-      #   self.link.averaged = False
-      if self.p._maxPlots > 0:
-        extra = len(children) - self.p._maxPlots + 1  #account for 1 more we will plot
-        for i in range(extra):
-          self.removeItem(children[0])
-          children.pop(0)
-          self.link.database.pop(0)
-      expColors = [(255) * (1 - 2**(-x)) for x in np.linspace(0+1/(len(children)+1), 1-1/(len(children)+1), len(children))]
-      for child, c in zip(children[1:], expColors):
-        child.setPen(self.p.pens[int(c)])
-
-    #plot new data
-    if len(self.link.database) > 1:
-      #if averaged, plot most recent ccep before average
-      p2 = 255*(1-2.5**(-1*(1-1/(len(self.link.database)+1))))
-      self.plot(x=self.p.x, y=self.link.database[-1], useCache=True, pen=self.p.pens[int(p2)], _callSync='off')
-    #self.plot(x=self.p.x, y=self.link.data, useCache=True, pen=p)
-
+    
     #update average plot
-    #if self.p._avgPlots:
     if self.link.significant:
       p = pg.mkPen('y', width=1.5) #ccep!
     else:
@@ -504,6 +528,25 @@ class CCEPPlot(pg.PlotItem):
     if self.name in self.p.stimChs:
       p = pg.mkPen('c', width=1.5)
     self.avg.setData(x=self.p.x, y=self.link.data, useCache=True, pen=p)
+
+  #plot: new name and link is only considered if we are dynamically sorting
+  def plotData(self):
+    children = self.listDataItems() #all plots
+    
+    #update colors for old plots
+    if self.p._maxPlots > 0:
+      extra = len(children) - self.p._maxPlots + 1  #account for 1 more we will plot
+      for i in range(extra):
+        self.removeItem(children[0])
+        children.pop(0)
+        self.link.database.pop(0)
+    expColors = [(255) * (1 - 2**(-x)) for x in np.linspace(0+1/(len(children)+1), 1-1/(len(children)+1), len(children))]
+    for child, c in zip(children[1:], expColors):
+      child.setPen(self.p.pens[int(c)])
+
+    #plot new data
+    p2 = 255*(1-2.5**(-1*(1-1/(len(self.link.database)+1))))
+    self.plot(x=self.p.x, y=self.link.database[-1], useCache=True, pen=self.p.pens[int(p2)], _callSync='off')
 
 class CCEPCalc():
   def __init__(self, parent, ch, title):
@@ -523,18 +566,22 @@ class CCEPCalc():
     return p2
 
   def setTableItem(self, ch):
-    self.tableItem = self.p.table.item(ch,0)
+    self.tableItem = self.p.table.item(ch,Column.Name.value)
 
   #t = boolean, if significant or not
   def totalChanged(self, t):
+    empColor = pg.QtGui.QColor(56,50,0)
     self.tableItem.sig = t
     r = self.p.table.row(self.tableItem) #find new row we are at
-    self.p.table.item(r,1).setData(QtCore.Qt.DisplayRole, int(t)) #change number at that row
-    self.p.table.item(r,2).setData(QtCore.Qt.DisplayRole, int(self.auc))
+    self.p.table.item(r,Column.Sig.value).setData(QtCore.Qt.DisplayRole, int(t)) #change number at that row
+    self.p.table.item(r,Column.AUC.value).setData(QtCore.Qt.DisplayRole, int(self.auc))
     self.significant = t
-    if (self.significant):
-      self.p.table.item(r,0).setBackground(pg.QtGui.QColor(56,50,0))
-      
+
+    item = self.p.table.item(r,Column.Name.value)
+    if self.significant and item.background() != empColor:
+      item.setBackground(empColor)
+    elif not self.significant and item.background() == empColor:
+      item.setBackground(pg.QtGui.QColor(0,0,0,0)) #transparent
 
   def computeData(self, newData):        
     #new data, normalize amplitude with baseline data

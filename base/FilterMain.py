@@ -15,6 +15,7 @@ protectedDocks = ["Load", "Log", "Brain"]
 class Filters(Group):
   chNamesSignal = pyqtSignal(list)
   dataProcessedSignal = pyqtSignal(object) #1D array: size=channels
+  elecNamesSignal = pyqtSignal(object) #dict
   def __init__(self, area):
     super().__init__(area)
   def publish(self):
@@ -38,6 +39,7 @@ class Filters(Group):
     files = os.listdir(self.path)
     try:
       files.remove("__pycache__")
+      files.remove("filterBase") #folder
     except:
       pass
     for file in files:
@@ -83,13 +85,14 @@ class Filters(Group):
       self.mod = filterModule.__dict__[file](self.win) #assumes class is same name as file
       self.mod.chNamesSignal.connect(self.emitChNames)
       self.mod.dataProcessedSignal.connect(self.emitData)
+      self.elecNamesSignal.connect(self.mod.acceptElecNames)
       for b in self.buttons.values():
         b.setChecked(False)
       self.buttons[file].setChecked(True)
       return True
     except:
-      traceback.print_exc() 
-      sys.exit(f"Could not access {mod}!")
+      traceback.print_exc()
+      self.logPrint(f"Could not access {mod}!")
       return False
     
   #automatically start last chosen filter
@@ -116,8 +119,12 @@ class Filters(Group):
     for b in self.buttons:
       b.setEnabled(enable)
   
-  #pass along signals
+  #pass along signals from filter to brain
   def emitChNames(self, chNames):
     self.chNamesSignal.emit(chNames)
   def emitData(self, data):
     self.dataProcessedSignal.emit(data)
+  
+  #send signals from brain to filter
+  def sendElecNames(self, elecDict):
+    self.elecNamesSignal.emit(elecDict)

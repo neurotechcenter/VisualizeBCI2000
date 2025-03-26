@@ -13,6 +13,7 @@ class MasterFilter(Group):
   dataProcessedSignal = pyqtSignal(object) #1D array: size=channels
   def __init__(self, area):
     super().__init__(area)
+    self.elecDict = {}
   def publish(self):
     #BCI2000
     self.t1 = QThread()
@@ -41,9 +42,6 @@ class MasterFilter(Group):
     #holds all parameters setn by signal sharing
     self.parameters = {}
 
-    #initialize style options
-    #self.setStyles()
-
     self.address = ('', 0) #default address if none provided
   def stop(self):
     print("STOPPING")
@@ -57,16 +55,8 @@ class MasterFilter(Group):
     self.t1.wait()
     self.t2.wait()
 
-  # def closeEvent(self, event): #overrides QMainWindow closeEvent
-  #   print("filter close event")
-  #   self.stop()
-  #   #self.localConfig.save(self)
-  #   #self.close()
-  #   super().closeEvent(event)
-  #   event.accept()
-
   def setConfig(self):
-    self.logPrint(f'Acquired: ch: {self.channels}, el: {self.elements}')
+    self.logPrint(f'Acquiring {self.channels} channels')
     self.chNamesSignal.emit(self.chNames)
     pass
 
@@ -111,3 +101,7 @@ class MasterFilter(Group):
   def logPrint(self, msg):
     self.win.output.append(">>" + msg)
     self.win.output.moveCursor(pg.QtGui.QTextCursor.End)
+
+  ##--slots, inherited by filters--##
+  def acceptElecNames(self, elecDict):
+    self.elecDict = elecDict

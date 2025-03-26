@@ -22,6 +22,7 @@ class BrainWorker(QObject):
     #worker thread
     #load brainmat
     print("Loading 3d brain")
+    self.lock.acquire()
     self.brainmat = scipy.io.loadmat(self.filename)
     mdl = self.brainmat['surfaceModel']
     verts = mdl['Model'][0][0]['vert'][0][0]
@@ -80,7 +81,7 @@ class BrainWorker(QObject):
     self._progress.emit(90)
 
     #render brain
-    p2 = gl.GLMeshItem(vertexes=verts, faces=faces, drawEdges=False, vertexColors=c, 
+    p2 = gl.GLMeshItem(vertexes=verts, faces=faces, drawEdges=False, vertexColors=c, shader="balloon",
                         glOptions='translucent', computeNormals=True, smooth=False)
     self.brainLoaded.emit(p2)
     self._progress.emit(100)
@@ -105,6 +106,7 @@ class BrainInitWorker(QObject):
 #main window displaying 3d information in real-time
 #updating is handled by master, updates when dataProcessedSignal is called 
 class BrainWindow(Group):
+  emitElectrodeNames = pyqtSignal(object) #dict
   class MyViewWidget(gl.GLViewWidget):
     def __init__(self, myParent, parent=None, devicePixelRatio=None, rotationMethod='euler'):
       super().__init__(parent, devicePixelRatio, rotationMethod)
@@ -189,8 +191,7 @@ class BrainWindow(Group):
     #load brain
     self.radius = 1
     self.t = QThread()
-    print(selected_files[0])
-    self.w = BrainWorker(selected_files[0], self.radius)
+    self.w = BrainWorker(selected_files[0], self.radius, self.loadLock)
     self.w.moveToThread(self.t)
     self.t.started.connect(self.w.run)
     self.w.brainLoaded.connect(self.brainLoaded)
@@ -250,6 +251,7 @@ class BrainWindow(Group):
       self.viewWidget.addItem(elMeshes[el])
       elMeshes[el].setColor(self.themes[self._theme].elDynamicC)
 
+  ###--slots--###
   def setConfig(self, chNames):
     print("setting config")
     self.chNames = chNames
@@ -259,6 +261,18 @@ class BrainWindow(Group):
     elif not self.loadLock.locked():
       #otherwise, if loaded, go directly to slot
       self.readyForConfig()
+
+  def plot(self, data):
+    print("plotting brain...")
+    if not self.activeEls:
+      return
+    for name, i in zip(self.activeEls, range(len(self.prevRadius))):
+      dr = data[i] * self.scaleMap[self._scale]  / self.prevRadius[i]
+      if dr == 0:
+        dr = 1e-5 / self.prevRadius[i] #manually set small radius
+      self.activeEls[name].scale(dr, dr, dr)
+      self.prevRadius[i] *= dr
+  ######
   
   def readyForConfig(self):
     print("READY FOR CONFIG")
@@ -307,23 +321,14 @@ class BrainWindow(Group):
     
     #update electrode colors
     self.colorScene()
+    #emit names
+    self.emitElectrodeNames.emit(namesDict)
 
     #reset electrode radii
     if hasattr(self, 'prevRadius'):
       for name, rad in zip(self.activeEls, self.prevRadius):
         self.activeEls[name].scale(self.radius/rad, self.radius/rad, self.radius/rad)
     self.prevRadius = np.ones(len(self.activeEls))*self.radius
-
-  def plot(self, data):
-    print("plotting brain...")
-    if not self.activeEls:
-      return
-    for name, i in zip(self.activeEls, range(len(self.prevRadius))):
-      dr = data[i] * self.scaleMap[self._scale]  / self.prevRadius[i]
-      if dr == 0:
-        dr = 1e-5 / self.prevRadius[i] #manually set small radius
-      self.activeEls[name].scale(dr, dr, dr)
-      self.prevRadius[i] *= dr
 
 class ColorScheme():
   def __init__(self, background, dynamicElectrodes, staticElectrodes):

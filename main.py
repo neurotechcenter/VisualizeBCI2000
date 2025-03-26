@@ -5,8 +5,8 @@ import importlib
 import traceback
 
 from filters.filterBase.BCI2000Communication import MasterFilter
-from newBase.FilterMain import Filters
-from newBase.Brain import BrainWindow
+from base.FilterMain import Filters
+from base.Brain import BrainWindow
 from base.SharedVisualization import Window, MyDockArea, TextOutput
 from pyqtgraph.dockarea import *
 
@@ -25,6 +25,7 @@ class MainWindow(Window):
     #connect windows
     self.f.chNamesSignal.connect(self.b.setConfig)
     self.f.dataProcessedSignal.connect(self.b.plot)
+    self.b.emitElectrodeNames.connect(self.f.sendElecNames)
     #create log
     self.output = TextOutput()
     self.area.addDock(Dock("Log", widget=self.output), position='right')
