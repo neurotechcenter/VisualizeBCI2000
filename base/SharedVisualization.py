@@ -50,7 +50,17 @@ class Window(pg.QtWidgets.QMainWindow):
     #load unique settings to window
     self.settings = pg.QtCore.QSettings("BCI2000", self.__class__.__name__)
     self.restoreGeometry(self.settings.value("geometry", pg.QtCore.QByteArray()))
-    self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
+
+    try:
+      s = self.settings.value("dockConfig", {'main': None, 'float': []})
+      if len(s['float']) == 0:
+        self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
+      else:
+        #for some reason it breaks if it stored floating windows, so reset
+        self.settings.setValue("dockConfig", {'main': None, 'float': []})
+
+    except:
+      print("Could not restore geometry. Using defaults...")
   
   def saveSettings(self):
     self.settings.setValue("geometry", self.saveGeometry())

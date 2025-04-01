@@ -108,8 +108,8 @@ class BrainInitWorker(QObject):
 class BrainWindow(Group):
   emitElectrodeNames = pyqtSignal(object) #dict
   class MyViewWidget(gl.GLViewWidget):
-    def __init__(self, myParent, parent=None, devicePixelRatio=None, rotationMethod='euler'):
-      super().__init__(parent, devicePixelRatio, rotationMethod)
+    def __init__(self, myParent, *args, devicePixelRatio=None, **kwargs):
+      super().__init__(*args, devicePixelRatio=devicePixelRatio, **kwargs)
       self.myParent = myParent
       self.loaded = False
     def mousePressEvent(self, event):
