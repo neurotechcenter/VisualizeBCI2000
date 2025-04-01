@@ -108,8 +108,10 @@ class BrainInitWorker(QObject):
 class BrainWindow(Group):
   emitElectrodeNames = pyqtSignal(object) #dict
   class MyViewWidget(gl.GLViewWidget):
-    def __init__(self, myParent, parent=None, devicePixelRatio=None, rotationMethod='euler'):
-      super().__init__(parent, devicePixelRatio, rotationMethod)
+    def __init__(self, myParent, *args, devicePixelRatio=None, **kwargs):
+      super().__init__(*args, devicePixelRatio=devicePixelRatio, **kwargs)
+    # def __init__(self, myParent, parent=None, devicePixelRatio=None, rotationMethod='euler'):
+    #   super().__init__(parent, devicePixelRatio, rotationMethod)
       self.myParent = myParent
       self.loaded = False
     def mousePressEvent(self, event):
@@ -165,8 +167,8 @@ class BrainWindow(Group):
     self.viewWidget.addItem(self.insrtTxt)
 
     #add dock
-    self.dock = Dock("Brain", widget=self.layout)
-    self.area.addDock(self.dock)
+    self.dock = Dock("Brain", widget=self.layout, size=(100,100))
+    self.area.addDock(self.dock, position='right')
 
 
   def loadBrain(self):

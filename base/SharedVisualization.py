@@ -23,6 +23,8 @@ class Group(QObject):
     #   self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
     # except:
     #   traceback.print_exc()
+  def closeEvent(self, event):
+    print("CLOSING")
   
   def saveSettings(self):
     pass
@@ -50,7 +52,10 @@ class Window(pg.QtWidgets.QMainWindow):
     #load unique settings to window
     self.settings = pg.QtCore.QSettings("BCI2000", self.__class__.__name__)
     self.restoreGeometry(self.settings.value("geometry", pg.QtCore.QByteArray()))
-    self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
+    try:
+      self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
+    except:
+      print("Could not restore geometry. Using defaults...")
   
   def saveSettings(self):
     self.settings.setValue("geometry", self.saveGeometry())

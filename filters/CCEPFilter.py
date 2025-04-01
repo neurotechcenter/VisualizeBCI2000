@@ -21,6 +21,7 @@ class Column(Enum):
 class CCEPFilter(GridFilter):
   def __init__(self, area):
     super().__init__(area)
+    self.aucThresh = 0
   def publish(self):
     super().publish()
 
@@ -85,6 +86,8 @@ class CCEPFilter(GridFilter):
     onsetLab = QtWidgets.QLabel("Onset Period", objectName="h3")
     onsetLab.setToolTip("Frequency of triggers that are displayed (e.g. 2 = every other trigger)")
 
+    self.focusDock = FocusWindow("Select Plots")
+
     settingsD = Dock("Settings")
     settingsLab = QtWidgets.QLabel("Settings", objectName="h1")
     settingsLab.setWordWrap(True)
@@ -111,6 +114,7 @@ class CCEPFilter(GridFilter):
     self.area.addDock(settingsD)
     self.area.addDock(d2, position='above', relativeTo=settingsD)
     self.area.addDock(Dock("Demo", widget=self.gridPlots), position='above', relativeTo=d2)
+    #self.area.addDock(self.focusDock)
 
   def loadSettings(self):
     super().loadSettings()
@@ -186,63 +190,10 @@ class CCEPFilter(GridFilter):
 
       #we scale by 10 cause slider can only do ints
       self.aucThresh = np.std(aocs) * self._stds/10
-      # #update table with new data
-      # for ch in self.chTable.values():
-      #   ch.totalChanged(ch.auc > self.aucThresh)
-      
-      # #sort table with updated numbers, if toggled
-      # if self._sortChs:
-      #   self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
 
       #plot!
-      self.renderPlots()
-
+      self._renderPlots()
       self.oldVal = newVal
-
-  def updateTable(self):
-    #update table with new data
-    for ch in self.chTable.values():
-      ch.totalChanged(ch.auc > self.aucThresh)
-    
-    #sort table with updated numbers, if toggled
-    if self._sortChs:
-      self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
-
-  def renderPlots(self, newData=True):
-    self.updateTable()
-    i = 0
-    for r in range(self.table.rowCount()):
-      if i == self.windows:
-        break
-      if not self.table.isRowHidden(r):
-        chName = self.table.item(r, Column.Name.value).text()
-        self.chPlot[i].changePlot(chName, self.chTable[chName])
-        if newData:
-          self.chPlot[i].plotData()
-        i+=1
-
-  def changeBackgroundColor(self, row, emph):
-    if row >= self.windows:
-      return
-    c = backgroundColor
-    if emph:
-      c = highlightColor
-    self.chPlot[row].vb.setBackgroundColor(c)
-    chName = self.table.item(row,Column.Name.value).text()
-    self.chPlot[row].selected = emph
-    self.chTable[chName].selected = emph
-  
-  def itemChanged(self):
-    items = self.table.selectedItems()
-    newRows = []
-    for p in items:
-      if p.row() not in self.selectedRows:
-        self.changeBackgroundColor(p.row(),True)
-      newRows.append(p.row())
-    for oldS in self.selectedRows:
-      if oldS not in newRows:
-        self.changeBackgroundColor(oldS, False)
-    self.selectedRows = newRows
 
   def setConfig(self):
     super().setConfig()
@@ -250,7 +201,7 @@ class CCEPFilter(GridFilter):
     self.gridNums.clear()
 
     self.chPlot = list(range(self.channels))
-    self.chOrder = list(range(self.channels))
+    self.tableRows = list(range(self.channels))
     #self.chPlot = {}
     self.chTable = {}
     self.regs = list(range(self.channels))
@@ -291,33 +242,52 @@ class CCEPFilter(GridFilter):
         #print(self.chPlot)
         if ch < self.windows:
           chName = self.chNames[ch]
-          self.chOrder[ch] = chName
           self.chPlot[ch] = CCEPPlot(self, title=chName, row=self.chTable[chName])
           self.gridPlots.addItem(self.chPlot[ch])
           if ch != 0:
             self.chPlot[ch].setLink(self.chPlot[ch-1])
+          else:
+            self.chPlot[ch].showAxis('left')
+            self.chPlot[ch].showAxis('bottom')
       self.gridPlots.nextRow()
     
+    #give first plot a friend
     if self.windows > 1:
-      self.chPlot[0].friend = self.chPlot[self.windows-1] #give first plot a friend
+      self.chPlot[0].friend = self.chPlot[self.windows-1]
     
-    #table
+      # n = MyTableWidgetItem(i, name, self.channels - i, self.channels) #save order as rank
+      # s = MyTableWidgetItem(i, 0)
+      # a = MyTableWidgetItem(i, 0)
+      # if self.elecDict:
+      #   eName = self.elecDict[name]
+      # else:
+      #   eName = ""
+      # e = MyTableWidgetItem(i, eName)
+      # r = TableRow(i, name, eName, self.channels)
+      # self.table.setItem(i, Column.Name.value, n)
+      # self.table.setItem(i, Column.Electrode.value, e)
+      # self.table.setItem(i, Column.Sig.value, s)
+      # self.table.setItem(i, Column.AUC.value, a)
+      
+    #initialize table
     self.table.setRowCount(self.channels)
     self.table.setColumnCount(len(Column))
     self.table.setHorizontalHeaderLabels([c.name for c in Column])
-    for i, name in enumerate(self.chNames):
-      n = MyTableWidgetItem(name, self.channels - i, self.channels) #save order as rank
-      s = MyTableWidgetItem(0)
-      a = MyTableWidgetItem(0)
+    for ch, chName in enumerate(self.chNames):
+      c = ch % self.numColumns
+      r = int(np.floor(ch/self.numColumns))
+      #add table
       if self.elecDict:
-        eName = self.elecDict[name]
+        eName = self.elecDict[chName]
       else:
         eName = ""
-      e = MyTableWidgetItem(eName)
-      self.table.setItem(i, Column.Name.value, n)
-      self.table.setItem(i, Column.Electrode.value, e)
-      self.table.setItem(i, Column.Sig.value, s)
-      self.table.setItem(i, Column.AUC.value, a)
+      self.tableRows[ch] = TableRow(ch, r, c, self.chPlot[ch], chName, eName, self.channels)
+      self.tableRows[ch].addRow(self.table)
+      
+      if ch < self.windows:
+        self.chPlot[ch].setRow(self.tableRows[ch]) #link plot to row
+    
+    #finish table
     if not self.elecDict:
       self.table.setColumnHidden(Column.Electrode.value, True) #hide electrode name col
     else:
@@ -336,7 +306,8 @@ class CCEPFilter(GridFilter):
     # print(self.table.horizontalHeaderItem(1).text())
     self.selectedRows = []
     #self.table.itemClicked.connect(self.tableItemClickedCallback)
-    self.table.itemSelectionChanged.connect(self.itemChanged)
+    self.table.itemSelectionChanged.connect(self._selectionChanged)
+    #self.table.itemChanged.connect(self._itemChanged)
 
   def setStdDevState(self, value):
     self._stds = value
@@ -348,7 +319,7 @@ class CCEPFilter(GridFilter):
   def setAvgPlots(self, state):
     self._avgPlots = state
   def setSortChs(self, state):
-    if self._sortChs and not state:
+    if self._sortChs and not state and hasattr(self, 'chTable'):
       #re-initialize order
       for ch in self.chTable.values():
         ch.totalChanged(False)
@@ -357,7 +328,7 @@ class CCEPFilter(GridFilter):
     self._sortChs = state
     #plot everything again with original order
     if hasattr(self, 'chTable'):
-      self.renderPlots(newData=False)
+      self._renderPlots(newData=False)
   def setSaveFigs(self, state):
     self._saveFigs = state
 
@@ -386,7 +357,6 @@ class CCEPFilter(GridFilter):
   def getParameterValue(self, pName):
     p = self.parameters[pName]
     return float(p['val'])
-
 
   def updateParameter(self, latStart, newLat):
     if newLat != self.trigLatLength:
@@ -418,6 +388,119 @@ class CCEPFilter(GridFilter):
 
   def saveFigures(self):
     saveFigure(self.print, self.bciThread.savePath, self.gridPlots, '_CCEPs', '.svg')
+    
+  def _renderPlots(self, newData=True):
+    #update table with new data
+    for ch in self.chTable.values():
+      ch.totalChanged(ch.auc > self.aucThresh)
+    
+    #sort table with updated numbers, if toggled
+    if self._sortChs:
+      self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
+      self._reorderPlots()
+      # for r in range(self.table.rowCount()):
+      #   #update each row's graph
+      #   self._itemChanged(self.table.item(r,Column.Name.value))
+    
+    #plot
+    i = 0
+    for r in range(self.table.rowCount()):
+      if i == self.windows:
+        break
+      if not self.table.isRowHidden(r):
+        chName = self.table.item(r, Column.Name.value).text()
+        #self.chPlot[i].changePlot(chName, self.chTable[chName])
+        if newData:
+          self.chPlot[i].plotData()
+        i+=1
+
+  def _changeBackgroundColor(self, row, emph):
+    if row >= self.windows:
+      return
+    c = backgroundColor
+    if emph:
+      c = highlightColor
+    self.chPlot[row].vb.setBackgroundColor(c)
+    chName = self.table.item(row,Column.Name.value).text()
+    self.chPlot[row].selected = emph
+    self.chTable[chName].selected = emph
+  
+  def _selectionChanged(self):
+    items = self.table.selectedItems()
+    newRows = []
+    for p in items:
+      if p.row() not in self.selectedRows:
+        self._changeBackgroundColor(p.row(),True)
+      newRows.append(p.row())
+    for oldS in self.selectedRows:
+      if oldS not in newRows:
+        self._changeBackgroundColor(oldS, False)
+    self.selectedRows = newRows
+  
+  #each plot will only be movexd once per update, with plots removed recursively
+  def _reorderPlots(self):
+    for row in self.tableRows:
+      row.updated = False
+    for row in self.tableRows:
+      self.movePlot(row)
+
+  def movePlot(self, row):
+    if row.updated:
+      return
+    row.updated = True
+    newInd = row.getRowNumber()
+    if row.oldInd < self.windows:
+      self.gridPlots.removeItem(row.figure)
+    row.oldInd = newInd
+
+    newCol = newInd % self.numColumns
+    newRow = int(np.floor(newInd/self.numColumns))
+    if newCol >= self.numColumns or newRow >= self.numRows:
+      #new spot is outside of bounds
+      return
+
+    oldItem = self.gridPlots.getItem(newRow, newCol)
+    if oldItem != None:
+      #need to move the plot in the way
+      self.movePlot(oldItem.tableRow)
+
+    #can now add item
+    self.gridPlots.addItem(row.figure, row=newRow, col=newCol)
+
+  
+  def _itemChanged(self, item):
+    r = item.row()
+    if item.p.oldRow != r:
+      newCol = r % self.numColumns
+      newRow = int(np.floor(r/self.numColumns))
+
+      if newCol < self.numColumns and newRow < self.numRows:
+        #hide item that exists there, if any
+        oldItem = self.gridPlots.getItem(newRow, newCol)
+        if oldItem != None:
+          self.gridPlots.removeItem(oldItem)
+          #oldItem.hide()
+        #show item
+        self.gridPlots.removeItem(item.p.figure)
+        self.gridPlots.addItem(item.p.figure, row=newRow, col=newCol)
+        item.p.figure.show()
+
+        # geometry = item.figure.geometry() #returns QRectF
+        # x = geometry.x() + geometry.width()*(newCol - item.p.plotC)
+        # y = geometry.y() + geometry.height()*(newRow - item.p.plotR)
+        # geometry.moveTo(x,y)
+        # self.gridPlots.ci.itemBorders[item.figure].setRect(geometry)
+        # item.figure.setGeometry(geometry)
+
+        # item.figure.show()
+        print(f'Moved {item.p.figure.titleLabel.text} to row {newRow} and col {newCol}')
+      # else:
+      #   plot.hide()
+      #   pass
+      #save changes
+      item.p.plotC = newCol
+      item.p.plotR = newRow
+      item.p.oldRow = item.row()
 
   ####---inherited slots---####
   def acceptElecNames(self, elecDict):
@@ -441,10 +524,44 @@ class CCEPFilter(GridFilter):
         else:
           self.table.setRowHidden(r, False)
 
+class TableRow():
+  class TableItem(QtWidgets.QTableWidgetItem):
+    def __init__(self, p, parent=0):
+      super().__init__(parent)
+      self.p = p
+      #make un-editable
+      self.setFlags(self.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+      pass
+    #define less than (<) operator for table sorting
+    def __lt__(self, b):
+      return (self.p.rank + self.p.sig*self.p.max) < (b.p.rank + b.p.sig*b.p.max)
+  def __init__(self, i, row, col, fig, chName, elName, maxVal):
+    self.plotR = row
+    self.plotC = col
+    self.rank = maxVal - i
+    self.sig = 0
+    self.max = maxVal
+    self.oldInd = i
+    self.chName = chName
+    self.elName = elName
+    self.figure = fig
+  def getRowNumber(self):
+    return self.n.row()
+  def addRow(self, table):
+    self.n = self.TableItem(self, self.chName) #save order as rank
+    s = self.TableItem(self)
+    a = self.TableItem(self)
+    e = self.TableItem(self, self.elName)
+
+    table.setItem(self.oldInd, Column.Name.value, self.n)
+    table.setItem(self.oldInd, Column.Electrode.value, e)
+    table.setItem(self.oldInd, Column.Sig.value, s)
+    table.setItem(self.oldInd, Column.AUC.value, a)
 
 class MyTableWidgetItem(QtWidgets.QTableWidgetItem):
-  def __init__(self, parent=None, rank=0, maxVal=0):
+  def __init__(self, row=0, parent=None, rank=0, maxVal=0):
     QtWidgets.QTableWidgetItem.__init__(self, parent)
+    self.oldRow = row
     self.rank = rank
     self.sig = 0
     self.max = maxVal
@@ -453,7 +570,6 @@ class MyTableWidgetItem(QtWidgets.QTableWidgetItem):
   #define less than (<) operator for table sorting
   def __lt__(self, b):
     return (self.rank + self.sig*self.max) < (b.rank + b.sig*b.max)
-        
 
 class CCEPPlot(pg.PlotItem):
   def __init__(self, parent, title, row):
@@ -462,6 +578,7 @@ class CCEPPlot(pg.PlotItem):
     self.name = title
     self.link = row
     self.selected = False
+    self.tableRow = None
     #prepare view
     axView = self.getViewBox()
     axView.disableAutoRange()
@@ -471,6 +588,11 @@ class CCEPPlot(pg.PlotItem):
     yLim = self.p.ccepLength
     axView.setXRange(xLim, yLim, padding=0)
     axView.setYRange(-1000, 1000)
+
+    self.setMinimumSize(100,100)
+
+    self.hideAxis('left')
+    self.hideAxis('bottom')
 
     #stim artifact filter
     self.latReg = pg.LinearRegionItem(values=(self.p.latStartSamples*1000.0/self.p.sr, self.p.trigLatLength), movable=True, brush=(9, 24, 80, 100), 
@@ -488,7 +610,14 @@ class CCEPPlot(pg.PlotItem):
 
     #self.backgroundC = (14, 14, 14)
     self.vb.setBackgroundColor(backgroundColor)
-
+  def setRow(self, row):
+    self.tableRow = row
+  #overrides mouseClickEvent
+  def mouseClickEvent(self, event):
+    if event.double():
+      print("double click")
+      self.p.focusDock.addPlot(self)
+  
   def setLink(self, plt):
     self.friend = plt #each plot gets one friend they affect
     self.getViewBox().setYLink(self.friend.getViewBox())
@@ -502,6 +631,8 @@ class CCEPPlot(pg.PlotItem):
       self.friend.latReg.setRegion(reg.getRegion())
 
   def changePlot(self, name, link):
+    #move whole plot instead of re-plotting
+    
     #have we changed channels
     if self.name != name:
       self.setTitle(name)
@@ -520,14 +651,14 @@ class CCEPPlot(pg.PlotItem):
         self.vb.setBackgroundColor(highlightColor)
         self.selected = True
     
-    #update average plot
-    if self.link.significant:
-      p = pg.mkPen('y', width=1.5) #ccep!
-    else:
-      p = pg.mkPen('w', width=1.5)
-    if self.name in self.p.stimChs:
-      p = pg.mkPen('c', width=1.5)
-    self.avg.setData(x=self.p.x, y=self.link.data, useCache=True, pen=p)
+    # #update average plot
+    # if self.link.significant:
+    #   p = pg.mkPen('y', width=1.5) #ccep!
+    # else:
+    #   p = pg.mkPen('w', width=1.5)
+    # if self.name in self.p.stimChs:
+    #   p = pg.mkPen('c', width=1.5)
+    # self.avg.setData(x=self.p.x, y=self.link.data, useCache=True, pen=p)
 
   #plot: new name and link is only considered if we are dynamically sorting
   def plotData(self):
@@ -547,6 +678,35 @@ class CCEPPlot(pg.PlotItem):
     #plot new data
     p2 = 255*(1-2.5**(-1*(1-1/(len(self.link.database)+1))))
     self.plot(x=self.p.x, y=self.link.database[-1], useCache=True, pen=self.p.pens[int(p2)], _callSync='off')
+    
+    #update average plot
+    if self.link.significant:
+      p = pg.mkPen('y', width=1.5) #ccep!
+    else:
+      p = pg.mkPen('w', width=1.5)
+    if self.name in self.p.stimChs:
+      p = pg.mkPen('c', width=1.5)
+    self.avg.setData(x=self.p.x, y=self.link.data, useCache=True, pen=p)
+
+class FocusWindow(Dock):
+  def __init__(self, name, area=None, size=(10,10), widget=None, hideTitle=False, autoOrientation=True, label=None, **kargs):
+    super().__init__(name, area, size, widget, hideTitle, autoOrientation, label, **kargs)
+
+    self.grid = pg.GraphicsLayoutWidget()
+    self.addWidget(self.grid)
+  def addPlot(self, plotItem):
+    #newPlot = self.grid.addPlot()
+    vb = plotItem.getViewBox()
+    vb.setYLink('')
+    st = vb.getState()
+    newPlot = self.grid.addPlot(viewBox=plotItem.getViewBox())
+    newPlot.showAxis('left')
+    newPlot.showAxis('bottom')
+    vb.setMouseEnabled(x=False, y=True)
+
+    #newPlot = self.addPlot()
+    # for p in plotItem.listDataItems():
+    #   newPlot.plot(p)
 
 class CCEPCalc():
   def __init__(self, parent, ch, title):
@@ -557,6 +717,7 @@ class CCEPCalc():
     self.selected = False
     self.database = []
     self.auc = 0
+    self.data = np.zeros(self.p.elements)
 
   def getActiveData(self, data):
     p1 = data[:self.p.baseSamples+self.p.latStartSamples]
@@ -571,17 +732,16 @@ class CCEPCalc():
   #t = boolean, if significant or not
   def totalChanged(self, t):
     empColor = pg.QtGui.QColor(56,50,0)
-    self.tableItem.sig = t
+    self.tableItem.p.sig = t
     r = self.p.table.row(self.tableItem) #find new row we are at
-    self.p.table.item(r,Column.Sig.value).setData(QtCore.Qt.DisplayRole, int(t)) #change number at that row
+    self.p.table.item(r,Column.Sig.value).setData(QtCore.Qt.DisplayRole, int(t))
     self.p.table.item(r,Column.AUC.value).setData(QtCore.Qt.DisplayRole, int(self.auc))
     self.significant = t
 
-    item = self.p.table.item(r,Column.Name.value)
-    if self.significant and item.background() != empColor:
-      item.setBackground(empColor)
-    elif not self.significant and item.background() == empColor:
-      item.setBackground(pg.QtGui.QColor(0,0,0,0)) #transparent
+    if self.significant and self.tableItem.background() != empColor:
+      self.tableItem.setBackground(empColor)
+    elif not self.significant and self.tableItem.background() == empColor:
+      self.tableItem.setBackground(pg.QtGui.QColor(0,0,0,0)) #transparent
 
   def computeData(self, newData):        
     #new data, normalize amplitude with baseline data

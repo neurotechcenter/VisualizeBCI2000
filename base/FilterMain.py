@@ -50,7 +50,7 @@ class Filters(Group):
       self.lay.addWidget(filterBut)
       self.buttons[fName] = filterBut
 
-    self.area.addDock(Dock("Load", widget=self.lay, autoOrientation=False))
+    self.area.addDock(Dock("Load", widget=self.lay, autoOrientation=False, size=(1,1)))
 
   def loadOperatorPath(self):
     #ask for file name
@@ -104,7 +104,10 @@ class Filters(Group):
 
   def saveSettings(self):
     super().saveSettings()
-    self.settings.setValue("filter", self.mod.__class__.__name__)
+    if hasattr(self, "mod"):
+      self.settings.setValue("filter", self.mod.__class__.__name__)
+    if hasattr(self, 'mod'):
+      self.mod.saveSettings()
 
   #button functions
   def _handleButtonPress(self, file):
