@@ -2,12 +2,11 @@ import os
 import sys
 import importlib
 import traceback
-from base.AcquireDataThread import AcquireDataThread
 from PyQt5.QtCore import QThread, pyqtSignal
 from pyqtgraph.dockarea import *
 import pyqtgraph as pg
 from PyQt5.QtCore import pyqtSignal
-from base.SharedVisualization import Window, MyDockArea, TextOutput, Group
+from base.SharedVisualization import Group
 
 #master class that handles communication between threads and filters
 #is inherited by every filter in "filters" folder
@@ -19,7 +18,7 @@ class Filters(Group):
   def __init__(self, area):
     super().__init__(area)
   def publish(self):
-    self.path = "filters"
+    self.fPath = "filters"
     self.lay = pg.LayoutWidget()
     self.buttons = {}
 
@@ -36,7 +35,7 @@ class Filters(Group):
     #add filter visualizations from files in "filters" folder
     self.lay.addLabel("Filters")
     self.lay.nextRow()
-    files = os.listdir(self.path)
+    files = os.listdir(self.fPath)
     try:
       files.remove("__pycache__")
       files.remove("filterBase") #folder
@@ -62,15 +61,26 @@ class Filters(Group):
 
     if file_dialog.exec():
       selected_files = file_dialog.selectedFiles()
-      print(selected_files)
-      self.bciName.setText(selected_files[0])
+      p = selected_files[0]
+      print(p)
+      self.bciName.setText(p)
+      if p != self.bciPath:
+        self.bciPath = p
+        if hasattr(self, 'mod'):
+          #path has changed, reset filter with new operator
+          self.runFilter(self.mod.__class__.__name__)
     else:
       #file not chosen
       return
 
 #for filter to be run, the class name, file name, and filter name must all be equal
   def runFilter(self, file):
-    mod = self.path + "." + file
+    if self.bciPath == "":
+      #no operator path set
+      self.logPrint("BCI2000 IS NOT SET. Choose the path first.")
+      self.buttons[file].setChecked(False)
+      return False
+    mod = self.fPath + "." + file
     try:
       if hasattr(self, "mod"):
         #close past connection
@@ -81,8 +91,9 @@ class Filters(Group):
           if d not in protectedDocks:
             docks[d].close()
         self.area.apoptose()
+      
       filterModule = importlib.import_module(mod) #in filters folder
-      self.mod = filterModule.__dict__[file](self.win) #assumes class is same name as file
+      self.mod = filterModule.__dict__[file](self.win, self.bciPath) #assumes class is same name as file
       self.mod.chNamesSignal.connect(self.emitChNames)
       self.mod.dataProcessedSignal.connect(self.emitData)
       self.elecNamesSignal.connect(self.mod.acceptElecNames)
@@ -93,18 +104,25 @@ class Filters(Group):
     except:
       traceback.print_exc()
       self.logPrint(f"Could not access {mod}!")
+      self.buttons[file].setChecked(False)
       return False
     
   #automatically start last chosen filter
   def loadSettings(self):
     super().loadSettings()
+    self.bciPath = self.settings.value("bciPath", "")
+    self.bciName.setText(self.bciPath)
+    
     filter = self.settings.value("filter", "")
     if filter != "":
       self.runFilter(filter)
 
   def saveSettings(self):
     super().saveSettings()
-    self.settings.setValue("filter", self.mod.__class__.__name__)
+    self.settings.setValue("bciPath", self.bciPath)
+    if hasattr(self, "mod"):
+      self.settings.setValue("filter", self.mod.__class__.__name__)
+      self.mod.saveSettings()
 
   #button functions
   def _handleButtonPress(self, file):

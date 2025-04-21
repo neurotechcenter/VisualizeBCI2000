@@ -1,12 +1,12 @@
-from filters.filterBase.BCI2000Communication import MasterFilter
+from filters.filterBase.MasterFilter import MasterFilter
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.dockarea import Dock
 
 #abstract class for any grid visualizations
 class GridFilter(MasterFilter):
-  def __init__(self, area):
-    super().__init__(area)
+  def __init__(self, area, bciPath):
+    super().__init__(area, bciPath)
   def publish(self):
     super().publish()
     self.gridPlots = pg.GraphicsLayoutWidget()

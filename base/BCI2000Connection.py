@@ -1,9 +1,11 @@
 import sys
+import os
 import importlib
 from PyQt5.QtCore import QThread, pyqtSignal, QObject
 
 #function to start connection to BCI2000 operator
-def BCI2000Instance(progPath):
+def BCI2000Instance(bciPath):
+  progPath = os.path.join(bciPath, "prog")
   sys.path.append(progPath) #BCI2000 prog path
   try:
     BCI2000Remote = importlib.import_module('BCI2000Remote') #in prog folder

@@ -19,9 +19,10 @@ class Column(Enum):
   AUC = 3
 
 class CCEPFilter(GridFilter):
-  def __init__(self, area):
-    super().__init__(area)
+  def __init__(self, area, bciPath):
+    super().__init__(area, bciPath)
     self.aucThresh = 0
+    self.oldVal = 0
   def publish(self):
     super().publish()
 
@@ -160,7 +161,7 @@ class CCEPFilter(GridFilter):
       newVal = 0
 
     #if newVal != self.oldVal:
-    if newVal:
+    if newVal != self.oldVal:
       print("plotting")
       #get stim ch if we can
       try:

@@ -4,8 +4,8 @@ from filters.filterBase.GridFilter import GridFilter
 
 #barebones default visualization
 class DataIOFilter(GridFilter):
-  def __init__(self, area):
-    super().__init__(area)
+  def __init__(self, area, bciPath):
+    super().__init__(area, bciPath)
   def publish(self):
     super().publish()
     self.area.addDock(Dock("button", widget=pg.QtWidgets.QPushButton("push")))

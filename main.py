@@ -1,10 +1,6 @@
 import pyqtgraph as pg
 import os
-import sys
-import importlib
-import traceback
 
-from filters.filterBase.BCI2000Communication import MasterFilter
 from base.FilterMain import Filters
 from base.Brain import BrainWindow
 from base.SharedVisualization import Window, MyDockArea, TextOutput
