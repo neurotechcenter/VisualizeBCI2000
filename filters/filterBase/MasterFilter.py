@@ -43,6 +43,8 @@ class MasterFilter(Group):
 
     self.address = ('', 0) #default address if none provided
   def setConfig(self):
+    self.logPrint(f'Acquiring {self.channels} channels')
+    self.chNamesSignal.emit(self.chNames)
     pass
   def stop(self):
     print("STOPPING")
