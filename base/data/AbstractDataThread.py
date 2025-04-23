@@ -7,4 +7,4 @@ class AbstractDataThread(QObject):
   propertiesSignal = pyqtSignal(int, int, list) #ch, el, ch names
   dataSignal       = pyqtSignal(np.ndarray)
   parameterSignal  = pyqtSignal(object)
-  logPrint         = pyqtSignal(str)
+  printSignal         = pyqtSignal(str)

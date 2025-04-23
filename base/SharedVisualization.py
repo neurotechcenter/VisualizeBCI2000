@@ -19,36 +19,29 @@ class Group(QObject):
   def loadSettings(self):
     #load unique settings to window
     self.settings = pg.QtCore.QSettings("BCI2000", self.__class__.__name__)
-    # try:
-    #   self.area.restoreState(self.settings.value("dockConfig", {'main': None, 'float': []}), missing='ignore') #default dock
-    # except:
-    #   traceback.print_exc()
   
   def saveSettings(self):
     pass
-    # if hasattr(self, 'area'):
-    #   self.settings.setValue("dockConfig", self.area.saveState())
+
   def logPrint(self, msg):
     self.win.output.append(">>" + msg)
     self.win.output.moveCursor(pg.QtGui.QTextCursor.End)
 
-
 # main window inherited by all GUIs.
 # Children should call publish first to add GUI elements,
 # then the style will be set and settings will be loaded
-class Window(pg.QtWidgets.QMainWindow):
+class Window(pg.QtWidgets.QMainWindow, Group):
   def __init__(self, **kargs):
-    super().__init__(**kargs)
-    self.publish()
-    self.loadSettings()
+    pg.QtWidgets.QMainWindow.__init__(self, **kargs)
+    Group.__init__(self, self)
     
   def closeEvent(self, event): #overrides QMainWindow closeEvent
     self.saveSettings()
     super().closeEvent(event)
     
   def loadSettings(self):
+    super().loadSettings()
     #load unique settings to window
-    self.settings = pg.QtCore.QSettings("BCI2000", self.__class__.__name__)
     self.restoreGeometry(self.settings.value("geometry", pg.QtCore.QByteArray()))
 
     try:
@@ -63,6 +56,7 @@ class Window(pg.QtWidgets.QMainWindow):
       print("Could not restore geometry. Using defaults...")
   
   def saveSettings(self):
+    super().saveSettings()
     self.settings.setValue("geometry", self.saveGeometry())
     self.settings.setValue("dockConfig", self.area.saveState())
 

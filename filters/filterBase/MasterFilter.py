@@ -36,7 +36,7 @@ class MasterFilter(Group):
     self.acqThr.dataSignal.connect(self.dataAcquired)
     self.acqThr.parameterSignal.connect(self.parameterReceived)
     #self.acqThr.message.connect(self.messageReceived)
-    self.acqThr.logPrint.connect(self.logPrint)
+    self.acqThr.printSignal.connect(self.logPrint)
 
     #holds all parameters setn by signal sharing
     self.parameters = {}
@@ -89,7 +89,6 @@ class MasterFilter(Group):
       self.bci = BCI2000Instance(path)
     except:
       self.logPrint(f'Could not access BCI2000Remote.dll at {path}')
-
 
   ##--slots, inherited by filters--##
   def acceptElecNames(self, elecDict):

@@ -51,7 +51,7 @@ class AcquireDataThread(AbstractDataThread):
           + message[1])
       sys.exit()
     self.s.listen(1)
-    self.logPrint.emit("Waiting for BCI2000 on %s at port %s" %(address[0], address[1]))
+    self.printSignal.emit("Waiting for BCI2000 on %s at port %s" %(address[0], address[1]))
     self.s.settimeout(0.1)        
     
   def run(self):
@@ -61,7 +61,7 @@ class AcquireDataThread(AbstractDataThread):
       try:
         self.waitForRead(self.s)
         conn, addr = self.s.accept()
-        self.logPrint.emit(f"Connected by {addr}")
+        self.printSignal.emit(f"Connected by {addr}")
         stream = conn.makefile('rb')
         while self._isRunning: #go until we receive an EOFError exception
           QThread.usleep(1) #use sleep to not get stuck waiting for read

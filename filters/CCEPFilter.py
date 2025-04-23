@@ -22,7 +22,6 @@ class CCEPFilter(GridFilter):
   def __init__(self, area, bciPath):
     super().__init__(area, bciPath)
     self.aucThresh = 0
-    self.oldVal = 0
   def publish(self):
     super().publish()
 
@@ -160,8 +159,7 @@ class CCEPFilter(GridFilter):
     except:
       newVal = 0
 
-    #if newVal != self.oldVal:
-    if newVal != self.oldVal:
+    if newVal != 0:
       print("plotting")
       #get stim ch if we can
       try:
@@ -191,7 +189,6 @@ class CCEPFilter(GridFilter):
 
       #plot!
       self._renderPlots()
-      self.oldVal = newVal
 
   def setConfig(self):
     super().setConfig()
@@ -204,7 +201,6 @@ class CCEPFilter(GridFilter):
     self.chTable = {}
     self.regs = list(range(self.channels))
     #init variables
-    self.oldVal = 0
     self.baselineLength = self.getParameterValue("BaselineEpochLength") #for now, assume ms
     self.latStart = 0
     self.latStartSamples = self._maskStart
