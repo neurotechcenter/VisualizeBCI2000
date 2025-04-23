@@ -19,8 +19,8 @@ class Column(Enum):
   AUC = 3
 
 class CCEPFilter(GridFilter):
-  def __init__(self, area, bciPath):
-    super().__init__(area, bciPath)
+  def __init__(self, area, bciPath, stream):
+    super().__init__(area, bciPath, stream)
     self.aucThresh = 0
   def publish(self):
     super().publish()

@@ -2,9 +2,8 @@
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
 import os
-from PyQt5.QtCore import pyqtSignal, QObject
+from PyQt5.QtCore import QObject
 from base.style import setStyle
-import traceback
 
 class Group(QObject):
   def __init__(self, win):
@@ -79,7 +78,6 @@ class TextOutput(pg.QtWidgets.QTextEdit):
     #self.setTextColor(pg.QtGui.QColor(255, 255, 255))
     self.setFontPointSize(11)
     self.ensureCursorVisible()  
-
 
 #-----SAVING FIGURE------#
 def saveFigure(myPrint, path, graphicsLayoutObj, suffix, ext='.png', antialias=True):

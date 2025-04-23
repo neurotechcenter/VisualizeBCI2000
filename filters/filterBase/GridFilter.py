@@ -5,8 +5,8 @@ from pyqtgraph.dockarea import Dock
 
 #abstract class for any grid visualizations
 class GridFilter(MasterFilter):
-  def __init__(self, area, bciPath):
-    super().__init__(area, bciPath)
+  def __init__(self, area, bciPath, stream):
+    super().__init__(area, bciPath, stream)
   def publish(self):
     super().publish()
     self.gridPlots = pg.GraphicsLayoutWidget()

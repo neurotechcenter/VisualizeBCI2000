@@ -1,18 +1,19 @@
 
 from base.BCI2000Connection import BCI2000Instance, BCI2000Worker
-from base.data.AcquireDataThread import AcquireDataThread
 from PyQt5.QtCore import QThread, pyqtSignal
 import pyqtgraph as pg
 from PyQt5.QtCore import pyqtSignal
 from base.SharedVisualization import Group
+import importlib
 
 #master class that handles communication between threads and filters
 #is inherited by every filter in "filters" folder
 class MasterFilter(Group):
   chNamesSignal = pyqtSignal(list)
   dataProcessedSignal = pyqtSignal(object) #1D array: size=channels
-  def __init__(self, area, bciPath):
+  def __init__(self, area, bciPath, stream):
     self.setBCIOperator(bciPath)
+    self.streamName = stream
     super().__init__(area)
     self.elecDict = {}
   def publish(self):
@@ -29,16 +30,15 @@ class MasterFilter(Group):
 
     #data thread
     self.t2 = QThread()
-    self.acqThr = AcquireDataThread()
+    self.acqThr = self.setDataStream(self.streamName[0], self.streamName[1])
     self.acqThr.moveToThread(self.t2)
     self.t2.started.connect(self.acqThr.run)
     self.acqThr.propertiesSignal.connect(self.propertiesAcquired)
     self.acqThr.dataSignal.connect(self.dataAcquired)
     self.acqThr.parameterSignal.connect(self.parameterReceived)
-    #self.acqThr.message.connect(self.messageReceived)
     self.acqThr.printSignal.connect(self.logPrint)
 
-    #holds all parameters setn by signal sharing
+    #holds all parameters sent by signal sharing
     self.parameters = {}
 
     self.address = ('', 0) #default address if none provided
@@ -63,13 +63,13 @@ class MasterFilter(Group):
     if newAddy != self.address:
       self.address = newAddy
     self.t1.quit()
-    self.acqThr.initalizeAddress(self.address)
+    self.acqThr.initalize(self.address)
     print("starting data thread")
     self.t2.start()
   
-  def propertiesAcquired(self, ch, el, chNames):
+  def propertiesAcquired(self, el, chNames):
     print("props acquired")
-    self.channels = ch
+    self.channels = len(chNames)
     self.elements = el
     self.chNames = chNames
     self.setConfig()
@@ -83,9 +83,14 @@ class MasterFilter(Group):
     self.win.output.append(">>" + msg)
     self.win.output.moveCursor(pg.QtGui.QTextCursor.End)
 
+  def setDataStream(self, path, file):
+    try:
+      mod = importlib.import_module(path + "." + file)
+      return mod.__dict__[file]()
+    except:
+      self.logPrint(f"Data thread could not be loaded! Chosen stream: {file}")
   def setBCIOperator(self, path):
     try:
-      print("setting bci")
       self.bci = BCI2000Instance(path)
     except:
       self.logPrint(f'Could not access BCI2000Remote.dll at {path}')

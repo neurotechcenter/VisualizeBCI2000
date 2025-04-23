@@ -11,15 +11,15 @@ from enum import Enum
 from PyQt5.QtCore import QThread
 
 from base.BCI2kReaderMod import ParseParam
-from base.data.AbstractDataThread import AbstractDataThread
+from dataThreads.AbstractDataThread import AbstractDataThread
 #
 # Data acquisition thread from BCI2000's shared memory
 # Acquires signals and states, their properties, and parameters
 #
 
-class AcquireDataThread(AbstractDataThread):
+class BCI2000DataThread(AbstractDataThread):
   def __init__(self):
-    super(AcquireDataThread, self).__init__()
+    super(BCI2000DataThread, self).__init__()
     self._isRunning = True
   def stop(self):
     self._isRunning = False
@@ -36,7 +36,7 @@ class AcquireDataThread(AbstractDataThread):
         self.print('Keyboard interrupt, exiting')
         quit()
 
-  def initalizeAddress(self, address):
+  def initalize(self, address):
     try:
       # With the help of bind() function 
       # binding host and port
@@ -70,10 +70,7 @@ class AcquireDataThread(AbstractDataThread):
           
           if msg.kind == 'SignalProperties' and msg.sourceID == 'Signal':
             print("SIGNAL PROPERTIES")
-            chs = len(msg.chNames)
-
-            els = msg.elements
-            self.propertiesSignal.emit(chs, els, msg.chNames)
+            self.propertiesSignal.emit(msg.elements, msg.chNames)
 
           elif msg.kind == 'SignalProperties' and msg.sourceID == 'States':
             pass

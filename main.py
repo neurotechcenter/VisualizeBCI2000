@@ -20,6 +20,7 @@ class MainWindow(Window):
     #create log
     self.output = TextOutput()
     self.fPath = "filters"
+    self.dataStreamPath = ""
 
     #toolbar
     menu = self.menuBar()
@@ -28,6 +29,8 @@ class MainWindow(Window):
     button_action.setStatusTip("BCI2000 directory location")
     file_menu.addAction(button_action)
     self.filters = {}
+    self.streams = {}
+    self.selStream = ['dataThreads', ''] #path, data stream name
 
     #initialize 3d window
     self.b = BrainWindow(self)
@@ -36,20 +39,25 @@ class MainWindow(Window):
     button_action.triggered.connect(self.loadOperatorPath)
     #add filters to toolbar
     filterMenu = menu.addMenu("&Filters")
-    files = os.listdir(self.fPath)
-    try:
-      files.remove("__pycache__")
-      files.remove("filterBase") #folder
-    except:
-      pass
-    for file in files:
-      fName = file.replace(".py", "")
+    filterNames = getFiles(self.fPath, ["filterBase"])
+    for fName in filterNames:
       filterBut = pg.QtWidgets.QAction(fName, self)
       filterBut.setCheckable(True)
       filterBut.triggered.connect(lambda checked, i=fName: self.runFilter(i))
 
       filterMenu.addAction(filterBut)
       self.filters[fName] = filterBut
+
+    #add data stream options to toolbar
+    dataMenu = menu.addMenu("&Data Streams")
+    streamNames = getFiles(self.selStream[0], ["AbstractDataThread.py"])
+    for sName in streamNames:
+      s = pg.QtWidgets.QAction(sName, self)
+      s.setCheckable(True)
+      s.triggered.connect(lambda checked, i=sName: self.setDataThread(i))
+
+      dataMenu.addAction(s)
+      self.streams[sName] = s
 
     #add log last
     self.area.addDock(Dock("Log", widget=self.output), position='right')
@@ -59,6 +67,12 @@ class MainWindow(Window):
     #self.f.saveSettings()
     self.b.saveSettings()
     super().closeEvent(event)
+  def setDataThread(self, stream):
+    self.selStream[1] = stream
+    #reset selection
+    for s in self.streams.values():
+      s.setChecked(False)
+    self.streams[stream].setChecked(True)
 
   def runFilter(self, file):
     if self.bciPath == "":
@@ -79,7 +93,7 @@ class MainWindow(Window):
         self.area.apoptose()
       
       filterModule = importlib.import_module(mod) #in filters folder
-      self.mod = filterModule.__dict__[file](self.win, self.bciPath) #assumes class is same name as file
+      self.mod = filterModule.__dict__[file](self.win, self.bciPath, self.selStream) #assumes class is same name as file
 
       #connect windows
       self.mod.chNamesSignal.connect(self.b.setConfig)
@@ -129,19 +143,37 @@ class MainWindow(Window):
       self.logPrint(f"Using BCI2000 at {self.bciPath}")
     #self.bciName.setText(self.bciPath)
     
+    self.selStream[1] = self.settings.value("stream", "BCI2000DataThread") #set BCI2000 as default
+    self.streams[self.selStream[1]].setChecked(True)
+
     filter = self.settings.value("filter", "")
     if filter != "":
       self.runFilter(filter)
-
+    
     #load geometry after filter is in place
     Window.loadSettings(self)
 
   def saveSettings(self):
     super().saveSettings()
     self.settings.setValue("bciPath", self.bciPath)
+    self.settings.setValue("stream", self.selStream[1])
     if hasattr(self, "mod"):
       self.settings.setValue("filter", self.mod.__class__.__name__)
       self.mod.saveSettings()
+
+def getFiles(path, ignore):
+  fileNames = []
+  files = os.listdir(path)
+  try:
+    for f in ignore:
+      files.remove(f)
+    files.remove("__pycache__") #always try to remove pychache last
+  except:
+    pass
+  for file in files:
+    fName = file.replace(".py", "")
+    fileNames.append(fName)
+  return fileNames
 
 if __name__ == '__main__':
   #change current directory to file location
