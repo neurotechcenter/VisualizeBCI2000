@@ -309,9 +309,6 @@ class CCEPFilter(GridFilter):
   def msToSamples(self, lengthMs):
     return int(lengthMs * self.sr/1000.0)
       
-  def getParameterValue(self, pName):
-    p = self.parameters[pName]
-    return float(p['val'])
 
 
   def updateParameter(self, latStart, newLat):

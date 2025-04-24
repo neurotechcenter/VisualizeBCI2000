@@ -84,6 +84,10 @@ class MasterFilter(Group):
   def parameterReceived(self, param):
     self.parameters[param['name']] = param
 
+  def getParameterValue(self, pName):
+    p = self.parameters[pName]
+    return float(p['val'])
+
   def logPrint(self, msg):
     self.win.output.append(">>" + msg)
     self.win.output.moveCursor(pg.QtGui.QTextCursor.End)
