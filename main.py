@@ -50,7 +50,7 @@ class MainWindow(Window):
 
     #add data stream options to toolbar
     dataMenu = menu.addMenu("&Data Streams")
-    streamNames = getFiles(self.selStream[0], ["AbstractDataThread.py"])
+    streamNames = getFiles(self.selStream[0], ["AbstractClasses.py"])
     for sName in streamNames:
       s = pg.QtWidgets.QAction(sName, self)
       s.setCheckable(True)
@@ -143,7 +143,7 @@ class MainWindow(Window):
       self.logPrint(f"Using BCI2000 at {self.bciPath}")
     #self.bciName.setText(self.bciPath)
     
-    self.selStream[1] = self.settings.value("stream", "BCI2000DataThread") #set BCI2000 as default
+    self.selStream[1] = self.settings.value("stream", "BCI2000") #set BCI2000 as default
     self.streams[self.selStream[1]].setChecked(True)
 
     filter = self.settings.value("filter", "")

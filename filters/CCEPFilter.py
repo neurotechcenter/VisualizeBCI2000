@@ -76,15 +76,7 @@ class CCEPFilter(GridFilter):
     self.saveFigBut = QtWidgets.QCheckBox("Save figures on refresh")
     self.saveFigBut.stateChanged.connect(self.setSaveFigs)
     self.saveFigBut.setToolTip("Automatically save a .svg of the CCEPs when they are cleared/refreshed")
-    #reset onset period
-    self.onsetSpin = pg.SpinBox(int=True, compactHeight=True)
-    self.onsetSpin.setMaximum(2**8 - 1)
-    self.onsetSpin.setMinimum(1)
-    #onsetSpin.setValue(self._maxPlots)
-    self.onsetSpin.sigValueChanged.connect(self.setOnset)
-    self.onsetSpin.setToolTip("Frequency of triggers that are displayed (e.g. 2 = every other trigger)")
-    onsetLab = QtWidgets.QLabel("Onset Period", objectName="h3")
-    onsetLab.setToolTip("Frequency of triggers that are displayed (e.g. 2 = every other trigger)")
+
 
     settingsD = Dock("Settings")
     settingsLab = QtWidgets.QLabel("Settings", objectName="h1")
@@ -104,8 +96,6 @@ class CCEPFilter(GridFilter):
     settingsD.addWidget(self.avgBut, row=12, col=0)
     settingsD.addWidget(self.sortBut, row=13, col=0)
     settingsD.addWidget(self.saveFigBut, row=14, col=0)
-    settingsD.addWidget(onsetLab, row=15, col=0)
-    settingsD.addWidget(self.onsetSpin, row=16, col=0)
     settingsD.addWidget(clearButton, row=17, col=0)
 
     d2 = Dock("Total CCEPs", widget=self.table)
@@ -152,18 +142,16 @@ class CCEPFilter(GridFilter):
     self.settings.setValue("maxWindows", self._maxWindows)
     self.settings.setValue("maxPlots", self._maxPlots)
 
-
+  #an attempt to abstract plotting from BCI2000
+  def checkPlot(self):
+    return self.comm.evaluate("CCEPTriggered")
+  
   def plot(self, data):
-    try:
-      newVal = int(self.bci.GetStateVariable("CCEPTriggered").value)
-    except:
-      newVal = 0
-
-    if newVal != 0:
+    if self.checkPlot():
       print("plotting")
       #get stim ch if we can
       try:
-        chBits = int(self.bci.GetStateVariable("StimulatingChannel").value)
+        chBits = self.comm.evaluate("StimulatingChannel")
       except:
         chBits = 0
       if chBits != 0:
@@ -216,8 +204,6 @@ class CCEPFilter(GridFilter):
 
     #to visualize stimulating channels if we can
     self.stimChs = []
-    onsetPeriod = int(self.getParameterValue("OnsetPeriod"))
-    self.onsetSpin.setValue(onsetPeriod)
 
     #go thru all channels for table
     count = 0
@@ -319,17 +305,6 @@ class CCEPFilter(GridFilter):
       for i in range(0, self.windows):
         #xEnd = self.chPlot[i].getViewBox().viewRange()[0][1]
         self.chPlot[i].getViewBox().setXRange(spin.value(), self.ccepLength)
-
-  def setOnset(self, spin):
-    try:
-      self.bci.Execute("SET STATE ResetOnsetPeriod " + str(spin.value()))
-    except:
-      print("Could not connect to BCI2000")
-  def resetOnsetPeriod(self):
-    try:
-      self.bci.Execute("SET STATE ResetOnsetPeriod 1")
-    except:
-      print("Could not connect to BCI2000")
       
   def msToSamples(self, lengthMs):
     return int(lengthMs * self.sr/1000.0)
@@ -343,11 +318,6 @@ class CCEPFilter(GridFilter):
     if newLat != self.trigLatLength:
       self.trigLatLength = newLat
       self.trigSamples = self.msToSamples(newLat)
-      if round(newLat) >= 0:
-        latP = round(newLat)
-      else:
-        latP = 0
-      #self.bciThread.bci.SetParameter("TriggerLatencyLength", str(latP)+"ms")
       self._maskEnd = self.latStartSamples + self.trigSamples
     if latStart != self.latStart:
       self.latStart = latStart

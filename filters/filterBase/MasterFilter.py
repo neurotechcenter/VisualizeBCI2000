@@ -1,42 +1,49 @@
 
-from base.BCI2000Connection import BCI2000Instance, BCI2000Worker
 from PyQt5.QtCore import QThread, pyqtSignal
 import pyqtgraph as pg
 from PyQt5.QtCore import pyqtSignal
 from base.SharedVisualization import Group
 import importlib
+import traceback
+from abc import abstractmethod
 
 #master class that handles communication between threads and filters
 #is inherited by every filter in "filters" folder
 class MasterFilter(Group):
   chNamesSignal = pyqtSignal(list)
   dataProcessedSignal = pyqtSignal(object) #1D array: size=channels
+
+  @abstractmethod
+  def plot(self, data):
+    pass
+
   def __init__(self, area, bciPath, stream):
-    self.setBCIOperator(bciPath)
+    self.bciPath = bciPath
     self.streamName = stream
     super().__init__(area)
     self.elecDict = {}
   def publish(self):
-    #BCI2000
-    self.t1 = QThread()
-    self.w = BCI2000Worker(self.bci, self.__class__.__name__)
-    self.w.moveToThread(self.t1)
-    self.t1.started.connect(self.w.run)
-    self.w.initSignal.connect(self.getParameters)
-    self.w.logPrint.connect(self.logPrint)
-    self.w.disconnected.connect(self.stop)
-    print("starting BCI2000 thread")
-    self.t1.start()
+    #initialize desired communication
+    self.comm = self.setDataStream(self.bciPath, self.streamName[0], self.streamName[1])
 
     #data thread
     self.t2 = QThread()
-    self.acqThr = self.setDataStream(self.streamName[0], self.streamName[1])
-    self.acqThr.moveToThread(self.t2)
-    self.t2.started.connect(self.acqThr.run)
-    self.acqThr.propertiesSignal.connect(self.propertiesAcquired)
-    self.acqThr.dataSignal.connect(self.dataAcquired)
-    self.acqThr.parameterSignal.connect(self.parameterReceived)
-    self.acqThr.printSignal.connect(self.logPrint)
+    self.comm.acqThr.moveToThread(self.t2)
+    self.t2.started.connect(self.comm.acqThr.run)
+    self.comm.acqThr.propertiesSignal.connect(self.propertiesAcquired)
+    self.comm.acqThr.dataSignal.connect(self.plot)
+    self.comm.acqThr.parameterSignal.connect(self.parameterReceived)
+    self.comm.acqThr.printSignal.connect(self.logPrint)
+
+    #BCI2000
+    self.t1 = QThread()
+    self.comm.worker.moveToThread(self.t1)
+    self.t1.started.connect(self.comm.worker.run)
+    self.comm.worker.initSignal.connect(self.getParameters)
+    self.comm.worker.logPrint.connect(self.logPrint)
+    self.comm.worker.disconnected.connect(self.stop)
+    print("starting BCI2000 thread")
+    self.t1.start()
 
     #holds all parameters sent by signal sharing
     self.parameters = {}
@@ -48,8 +55,8 @@ class MasterFilter(Group):
     pass
   def stop(self):
     print("STOPPING")
-    self.w.stop()
-    self.acqThr.stop()
+    self.comm.worker.stop()
+    self.comm.acqThr.stop()
     #stop BCI2000 thread
     self.t1.quit()
     #stop data acquisition
@@ -63,7 +70,7 @@ class MasterFilter(Group):
     if newAddy != self.address:
       self.address = newAddy
     self.t1.quit()
-    self.acqThr.initalize(self.address)
+    self.comm.acqThr.initalize(self.address)
     print("starting data thread")
     self.t2.start()
   
@@ -73,27 +80,21 @@ class MasterFilter(Group):
     self.elements = el
     self.chNames = chNames
     self.setConfig()
-  def dataAcquired(self, data):
-    self.plot(data)
+
   def parameterReceived(self, param):
     self.parameters[param['name']] = param
-  def messageReceived(self, msg):
-    print(msg)
+
   def logPrint(self, msg):
     self.win.output.append(">>" + msg)
     self.win.output.moveCursor(pg.QtGui.QTextCursor.End)
 
-  def setDataStream(self, path, file):
+  def setDataStream(self, bciPath, path, file):
     try:
       mod = importlib.import_module(path + "." + file)
-      return mod.__dict__[file]()
+      return mod.__dict__[file](bciPath, self.__class__.__name__)
     except:
-      self.logPrint(f"Data thread could not be loaded! Chosen stream: {file}")
-  def setBCIOperator(self, path):
-    try:
-      self.bci = BCI2000Instance(path)
-    except:
-      self.logPrint(f'Could not access BCI2000Remote.dll at {path}')
+      #self.logPrint(f"Data thread could not be loaded! Chosen stream: {file}")
+      traceback.print_exc()
 
   ##--slots, inherited by filters--##
   def acceptElecNames(self, elecDict):

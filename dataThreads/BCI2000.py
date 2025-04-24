@@ -3,6 +3,8 @@ from select import select
 from multiprocessing import shared_memory
 import numpy as np
 import sys
+import os
+import importlib
 import io
 import struct
 import traceback
@@ -11,11 +13,91 @@ from enum import Enum
 from PyQt5.QtCore import QThread
 
 from base.BCI2kReaderMod import ParseParam
-from dataThreads.AbstractDataThread import AbstractDataThread
+from dataThreads.AbstractClasses import *
 #
 # Data acquisition thread from BCI2000's shared memory
 # Acquires signals and states, their properties, and parameters
 #
+class BCI2000(AbstractCommunication):
+  def __init__(self, bciPath, file):
+    self._acqThr = BCI2000DataThread()
+    self._worker = BCI2000Worker(bciPath, file)
+
+  @property
+  def worker(self):
+    return self._worker
+  @property
+  def acqThr(self):
+    return self._acqThr
+  
+  def evaluate(self, state):
+    return int(self.worker.bci.GetStateVariable(state).value)
+
+#function to start connection to BCI2000 operator
+def BCI2000Instance(bciPath):
+  progPath = os.path.join(bciPath, "prog")
+  sys.path.append(progPath) #BCI2000 prog path
+  try:
+    BCI2000Remote = importlib.import_module('BCI2000Remote') #in prog folder
+    return BCI2000Remote.BCI2000Remote() #init BCI2000 remote
+  except:
+    sys.exit("Could not access BCI2000Remote.dll! Make sure BCI2000/prog is in your path")
+
+class BCI2000Worker(AbstractWorker):
+  def __init__(self, bciPath, className):
+    super().__init__()
+    self.bci = BCI2000Instance(bciPath)
+    self.bci.Connect()
+    self.className = className
+    self.initialized = False
+    self.go = True
+    self.oldSystemState = ""
+    self._isRunning = True
+  def stop(self):
+    self._isRunning = False
+  def waitForState(self, state):
+    print(f'waiting for {state}...')
+    self.bci.Execute(f'WAIT FOR {state}')
+    self.initSignal.emit()
+  def run(self):
+    notConnected = True
+    while notConnected:
+      self.bci.Execute("WAIT FOR CONNECTED|RESTING 0.5")
+      notConnected = self.bci.Result == 'false'
+      st = self.bci.GetSystemState()
+      if st == "Suspended":
+        self.logPrint.emit("Press Set Config to connect...")
+      elif st == "Running":
+        self.logPrint.emit("Stop the run to connect...")
+      if not self._isRunning: return
+
+    #access sharing parameter
+    while True:
+      try:
+        p = self.bci.GetParameter(f'Share{self.className}')
+        if p == "":
+          #populate parameter
+          self.bci.Execute(f'SET PARAMETER Share{self.className} localhost:1897')
+          QThread.msleep(50) #sleep for 50ms before accessing new parameter
+        else:
+          self.initSignal.emit(p)
+          break
+      except:
+        self.logPrint.emit(f'Parameter Share{self.className} does not exist! Cannot acquire data')
+        break
+
+    while self._isRunning:
+      try:
+        QThread.sleep(1)
+        st = self.bci.GetSystemState()
+        if st == "Idle" or st == "":
+          break
+      except:
+        break
+      
+    #we have disconnected from bci2000
+    print("DISCONNECTED")
+    self.disconnected.emit()
 
 class BCI2000DataThread(AbstractDataThread):
   def __init__(self):
@@ -23,7 +105,6 @@ class BCI2000DataThread(AbstractDataThread):
     self._isRunning = True
   def stop(self):
     self._isRunning = False
-  
 
   def waitForRead(self, sock):
     """polling wait for data on the socket so we may react to a keyboard interrupt"""
