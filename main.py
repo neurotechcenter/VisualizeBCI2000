@@ -60,7 +60,7 @@ class MainWindow(Window):
       self.streams[sName] = s
 
     #add log last
-    self.area.addDock(Dock("Log", widget=self.output), position='right')
+    self.area.addDock(Dock("Log", widget=self.output), position='above', relativeTo=self.b.dock)
   def connectSetConfig(self, chNames):
     self.b.setConfig(chNames)
   def closeEvent(self, event): #overrides QMainWindow closeEvent

@@ -98,10 +98,10 @@ class CCEPFilter(GridFilter):
     settingsD.addWidget(self.saveFigBut, row=14, col=0)
     settingsD.addWidget(clearButton, row=17, col=0)
 
-    d2 = Dock("Total CCEPs", widget=self.table)
+    d2 = Dock("Table", widget=self.table)
     self.area.addDock(settingsD)
     self.area.addDock(d2, position='above', relativeTo=settingsD)
-    self.area.addDock(Dock("Demo", widget=self.gridPlots), position='above', relativeTo=d2)
+    self.area.addDock(Dock("Plots", widget=self.gridPlots), position='above', relativeTo=d2)
 
   def loadSettings(self):
     super().loadSettings()

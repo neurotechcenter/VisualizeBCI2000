@@ -279,6 +279,8 @@ class BrainWindow(Group):
     if not hasattr(self, 'chNames'):
       #we are quitting prematurely
       return
+    if not hasattr(self, "w"): #haven't loaded brain
+      return
     #brain has been loaded, and ready to initialize
     #initialize working array of updating channels
     self.activeEls = {}
