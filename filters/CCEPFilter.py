@@ -42,12 +42,6 @@ class CCEPFilter(GridFilter):
     self.stdSpin.valueChanged.connect(self.setStdDevState)
     stdLab = QtWidgets.QLabel("Threshold (STD)", objectName="h3")
     stdLab.setToolTip("Standard Deviations for threshold, calculated from baseline")
-    #specifies where to start visualizing the signal
-    self.baseSpin = pg.SpinBox(int=True, compactHeight=True)
-    self.baseSpin.sigValueChanged.connect(self.setBaselineBegin)
-    self.baseSpin.setToolTip("First value of x axis")
-    baseLab = QtWidgets.QLabel('x<sub>0</sub>', objectName="h3")
-    baseLab.setToolTip("First value of x axis")
     #max window number
     self.maxSpin = pg.SpinBox(int=True, compactHeight=True)
     self.maxSpin.setMaximum(100)
@@ -89,8 +83,6 @@ class CCEPFilter(GridFilter):
     settingsD.addWidget(self.stdSpin, row=5, col=0)
     settingsD.addWidget(maxLab, row=6, col=0)
     settingsD.addWidget(self.maxSpin, row=7, col=0)
-    settingsD.addWidget(baseLab, row=8, col=0)
-    settingsD.addWidget(self.baseSpin, row=9, col=0)
     settingsD.addWidget(holdLab, row=10, col=0)
     settingsD.addWidget(self.holdSpin, row=11, col=0)
     settingsD.addWidget(self.avgBut, row=12, col=0)
@@ -118,9 +110,6 @@ class CCEPFilter(GridFilter):
     self._avgPlots = eval(self.settings.value("avgPlots", "False").lower().capitalize())
     self.avgBut.setChecked(self._avgPlots)
 
-    self._visBegin = self.settings.value("visBegin", 0)
-    self.baseSpin.setValue(self._visBegin)
-
     self._maxWindows = self.settings.value("maxWindows", 25)
     self.maxSpin.setValue(self._maxWindows)
 
@@ -138,7 +127,6 @@ class CCEPFilter(GridFilter):
     self.settings.setValue("avgPlots", bool(self._avgPlots))
     self.settings.setValue("maskStart", self._maskStart)
     self.settings.setValue("maskEnd", self._maskEnd)
-    self.settings.setValue("visBegin", self._visBegin)
     self.settings.setValue("maxWindows", self._maxWindows)
     self.settings.setValue("maxPlots", self._maxPlots)
 
@@ -164,9 +152,8 @@ class CCEPFilter(GridFilter):
 
       #process data
       aocs = []
-      processedData = np.zeros(np.shape(data))
       for i, ch in enumerate(self.chTable.values()):
-        processedData[i] = ch.computeData(data[i]) #compute data
+        ch.computeData(data[i]) #compute data
         aocs.append(ch.auc)
       
       #send processed data
@@ -297,19 +284,9 @@ class CCEPFilter(GridFilter):
       self._renderPlots(newData=False)
   def setSaveFigs(self, state):
     self._saveFigs = state
-
-  def setBaselineBegin(self, spin):
-    self._visBegin = spin.value()
-    if hasattr(self, "windows"):
-      #windows have been configured
-      for i in range(0, self.windows):
-        #xEnd = self.chPlot[i].getViewBox().viewRange()[0][1]
-        self.chPlot[i].getViewBox().setXRange(spin.value(), self.ccepLength)
       
   def msToSamples(self, lengthMs):
     return int(lengthMs * self.sr/1000.0)
-      
-
 
   def updateParameter(self, latStart, newLat):
     if newLat != self.trigLatLength:
@@ -450,25 +427,22 @@ class CCEPPlot(pg.PlotItem):
     axView.disableAutoRange()
     axView.setMouseEnabled(x=False, y=True)
     axView.setDefaultPadding(0)
-    xLim = self.p._visBegin
+    xLim = -self.p.baselineLength
     yLim = self.p.ccepLength
     axView.setXRange(xLim, yLim, padding=0)
     axView.setYRange(-1000, 1000)
 
     self.setMinimumSize(100,100)
 
-    self.hideAxis('left')
-    self.hideAxis('bottom')
-
     #stim artifact filter
-    self.latReg = pg.LinearRegionItem(values=(self.p.latStartSamples*1000.0/self.p.sr, self.p.trigLatLength), movable=True, brush=(9, 24, 80, 100), 
+    self.latLow = self.p.latStartSamples*1000.0/self.p.sr
+    self.latHigh = self.p.trigLatLength
+    self.latReg = pg.LinearRegionItem(values=(self.latLow, self.latHigh), movable=True, brush=(9, 24, 80, 100), 
                                       pen=pg.mkPen(color=(9, 24, 80), width=1, style=QtCore.Qt.DotLine), bounds=[xLim, yLim])
     self.latReg.setZValue(highZValue) #make sure its in front of all plots
     #callbacks
     self.latReg.sigRegionChanged.connect(self.regionChanged)
     self.addItem(self.latReg)
-    self.latHigh = self.p.trigLatLength
-    self.latLow = 0
 
     #initialize average plot
     self.avg = self.plot(x=self.p.x, y=np.zeros(self.p.elements), pen=pg.mkPen(backgroundColor)) #filler data
@@ -579,7 +553,8 @@ class CCEPCalc():
       self.data = newData
       #stdBase = 0
     else:
-      avBase = np.mean(newData[:self.p.baseSamples])
+      #avBase = np.mean(newData[:self.p.baseSamples])
+      avBase = np.median(newData[:self.p.baseSamples])
       #stdBase = np.std(self.rawData[:self.p.baseSamples], dtype=np.float64)
       self.data = np.subtract(newData, avBase)
 
@@ -595,4 +570,3 @@ class CCEPCalc():
     ccepData = self.getActiveData(self.data)
     normData = ccepData - np.mean(ccepData)
     self.auc = np.trapz(abs(normData))/1e3
-    return self.auc
