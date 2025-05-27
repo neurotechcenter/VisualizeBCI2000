@@ -39,7 +39,6 @@ class Window(pg.QtWidgets.QMainWindow, Group):
     super().closeEvent(event)
     
   def loadSettings(self):
-    super().loadSettings()
     #load unique settings to window
     self.restoreGeometry(self.settings.value("geometry", pg.QtCore.QByteArray()))
 
@@ -53,6 +52,7 @@ class Window(pg.QtWidgets.QMainWindow, Group):
 
     except:
       print("Could not restore geometry. Using defaults...")
+    super().loadSettings()
   
   def saveSettings(self):
     super().saveSettings()
@@ -80,18 +80,41 @@ class TextOutput(pg.QtWidgets.QTextEdit):
     self.ensureCursorVisible()  
 
 #-----SAVING FIGURE------#
-def saveFigure(myPrint, path, graphicsLayoutObj, suffix, ext='.png', antialias=True):
-  newPath = _getPath(path)
-  myPrint("Saving image at " + newPath + suffix + ext)
-  if ext == '.svg':
-    exporter = pg.exporters.SVGExporter(graphicsLayoutObj.ci)
+def saveFigure(graphicsLayoutObj, antialias=True):
+  #ask for file name
+  file_dialog = pg.QtWidgets.QFileDialog()
+  file_dialog.setWindowTitle("Select File Location...")
+  file_dialog.setFileMode(pg.QtWidgets.QFileDialog.FileMode.AnyFile)
+  file_dialog.setAcceptMode(pg.QtWidgets.QFileDialog.AcceptMode.AcceptSave)
+  #file_dialog.setOption(pg.QtWidgets.QFileDialog.ShowDirsOnly, True)
+  exts = ["SVG (*.svg)", "Image (*.png)"]
+  file_dialog.setNameFilter(exts[0] + ";;" + exts[1])
+
+  if file_dialog.exec():
+    selected_files = file_dialog.selectedFiles()
+    p = selected_files[0]
+    print(p)
+    ext = file_dialog.selectedNameFilter()
+    if ext == exts[0]: #svg
+      exporter = pg.exporters.SVGExporter(graphicsLayoutObj.ci)
+    else: #png
+      exporter = pg.exporters.ImageExporter(graphicsLayoutObj.ci)
+      exporter.parameters()['antialias'] = antialias
+    exporter.export(p)
   else:
-    exporter = pg.exporters.ImageExporter(graphicsLayoutObj.ci)
-    exporter.parameters()['antialias'] = antialias
-  #double size to make image quality better
-  #exporter.parameters()['width'] = exporter.parameters()['width'] * 2
-  #exporter.parameters()['height'] = exporter.parameters()['height'] * 2
-  exporter.export(_nonExistantFileName(newPath + suffix, ext) + ext)
+    #file not chosen
+    return
+  # newPath = _getPath(path)
+  # #myPrint("Saving image at " + newPath + suffix + ext)
+  # if ext == '.svg':
+  #   exporter = pg.exporters.SVGExporter(graphicsLayoutObj.ci)
+  # else:
+  #   exporter = pg.exporters.ImageExporter(graphicsLayoutObj.ci)
+  #   exporter.parameters()['antialias'] = antialias
+  # #double size to make image quality better
+  # #exporter.parameters()['width'] = exporter.parameters()['width'] * 2
+  # #exporter.parameters()['height'] = exporter.parameters()['height'] * 2
+  # exporter.export(_nonExistantFileName(newPath + suffix, ext) + ext)
 
 ########################
 #### HELPER METHODS ####

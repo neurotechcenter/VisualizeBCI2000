@@ -14,6 +14,23 @@ ParameterTree {{
                     background-color: {darkGrey};
                     font-size: 14pt;
 }}
+ParameterTree QPushButton {{
+    color: {darkBackground};
+    background-color: white; 
+    border-style: outset; 
+    border-width: 2px; 
+    border-radius: 5px; 
+    border-color: #303030; 
+    font: bold 17px; 
+    padding: 2px;
+    margin: 1px;
+    }}
+ParameterTree QPushButton:hover {{
+    background-color: #A0A0A0;
+    margin: 2px;
+}}
+ParameterTree QPushButton:disabled {{background-color: grey; color: darkgrey;}}
+ParameterTree QPushButton:checked {{background-color: {lightColor}; margin: 15px; border-width: 0;}}
 QLabel#h1 {{
     font: bold 24px; 
     color: white;
@@ -48,6 +65,10 @@ SpinBox {{
     min-height: 1.2em;
     margin-bottom: 10px;
 }}
+QLineEdit {{
+    font: 16px;
+    margin: 0.5em;
+}}
 QCheckBox {{
     font: 16px;
     color: white;
@@ -77,11 +98,8 @@ QSlider::groove:horizontal:hover {{
 QSlider::handle:horizontal {{
     background-color: {darkColor};
     border: none;
-    height: 20px;
-    width: 20px;
+    width: 15px;
     margin: -20px 0;
-    border-radius: 10px;
-    padding: -20px 0px;
 }}
 QSlider::handle:horizontal:hover {{
     background-color:{lightColor};
@@ -89,7 +107,6 @@ QSlider::handle:horizontal:hover {{
 QSlider::handle:horizontal:pressed {{
     background-color: rgb(65, 255, 195);
 }}
-QSlider {{min-height: 50px;}}
 QMainWindow {{
     background-color: {darkGrey};
     font: 20px;
