@@ -24,11 +24,25 @@ class Column(Enum):
 ## test add/remove
 ## this group includes a menu allowing the user to add new parameters into its child list
 class ScalableGroup(ptree.parameterTypes.GroupParameter):
-    def __init__(self, **opts):
+    def __init__(self, p, **opts):
         opts['type'] = 'group'
         opts['addText'] = "Add"
         opts['addList'] = ['str', 'float', 'int']
         ptree.parameterTypes.GroupParameter.__init__(self, **opts)
+        self.p = p
+
+        #enable/disable
+        self.addChild({'name': 'Enable auto-detection', 'type': 'bool', 'value': 0})
+        self.a = self.param('Enable auto-detection')
+        self.a.sigValueChanged.connect(self.aChanged)
+        #reference channel
+        self.addChild({'name': 'Detection channel', 'type': 'str', 'value': "2", 'tip': 'Index or name'})
+        self.b = self.param('Detection channel')
+        self.b.sigValueChanged.connect(self.aChanged)
+    def aChanged(self):
+      self.p.setAutoDetect(self.a.value())
+    def bChanged(self):
+      self.p.setDetectChannels(self.b.value())
     
     def addNew(self, typ):
         val = {
@@ -37,24 +51,6 @@ class ScalableGroup(ptree.parameterTypes.GroupParameter):
             'int': 0
         }[typ]
         self.addChild(dict(name="ScalableParam %d" % (len(self.childs)+1), type=typ, value=val, removable=True, renamable=True))
-
-class TestParamGroup(ptree.parameterTypes.GroupParameter):
-  def __init__(self, **opts):
-    opts['type'] = 'bool'
-    opts['value'] = True
-    ptree.parameterTypes.GroupParameter.__init__(self, **opts)
-    self.addChild({'name': 'A = 1/B', 'type': 'float', 'value': 7, 'suffix': 'Hz', 'siPrefix': True})
-    self.addChild({'name': 'B = 1/A', 'type': 'float', 'value': 1/7., 'suffix': 's', 'siPrefix': True})
-    self.a = self.param('A = 1/B')
-    self.b = self.param('B = 1/A')
-    self.a.sigValueChanged.connect(self.aChanged)
-    self.b.sigValueChanged.connect(self.bChanged)
-            
-  def aChanged(self):
-    self.b.setValue(1.0 / self.a.value(), blockSignal=self.bChanged)
-
-  def bChanged(self):
-    self.a.setValue(1.0 / self.b.value(), blockSignal=self.aChanged)
 
 class TestBooleanParams(ptree.parameterTypes.GroupParameter):
   def __init__(self, p, **opts):
@@ -107,26 +103,6 @@ class TestBooleanParams(ptree.parameterTypes.GroupParameter):
   def hChanged(self):
     self.p.clearFigures()
 
-class TestInteractor(ptree.Interactor):
-  def __init__(self, **kwargs):
-    super().__init__(**kwargs)
-    self.info = QtWidgets.QMessageBox.information
-    @self.decorate()
-    def aFunc(x=5, y=6):
-      print("working")
-      return self.info(None, 'Hello World', f'X is {x}, Y is {y}')
-
-    @self.decorate()
-    def bFunc(first=5, second=6):
-      self.info(None, 'Hello World', f'first is {first}, second is {second}')
-      print("yuh")
-
-    @self.decorate()
-    def cFunc(uno=5, dos=6):
-      self.info(None, 'Hello World', f'uno is {uno}, dos is {dos}')
-      print("tuc")
-
-
 class CCEPFilter(GridFilter):
   def __init__(self, area, bciPath, stream):
     super().__init__(area, bciPath, stream)
@@ -144,10 +120,7 @@ class CCEPFilter(GridFilter):
     #create parameter tree
     params = [
         TestBooleanParams(name= 'General Options', p=self, showTop=False),
-        # ScalableGroup(name="Auto Detect Options", tip='Click to add children', children=[
-        #     {'name': 'ScalableParam 1', 'type': 'str', 'value': "default param 1"},
-        #     {'name': 'ScalableParam 2', 'type': 'str', 'value': "default param 2"},
-        # ]),
+        ScalableGroup(name="Auto Detect Options", p=self, tip='Click to add channels'),
     ]
 
     self.p = ptree.Parameter.create(name="Settings", type='group', children=params, title=None)
@@ -180,7 +153,7 @@ class CCEPFilter(GridFilter):
       self.p.restoreState(pState, addChildren=False, removeChildren=False)
     self._maxWindows = self.p.child('General Options')['Max Windows']
     self._sortChs = self.p.child('General Options')['Sort channels']
-    self._autoDetect = False
+    self._trigCh = self.p.child('Auto Detect Options')['Detection channel']
 
   def saveSettings(self):
     super().saveSettings()
@@ -213,7 +186,7 @@ class CCEPFilter(GridFilter):
       aocs = []
       chunk = False
       peaks = None
-      if self._autoDetect:
+      if self.p.child('Auto Detect Options')['Detection channel']:
         #trigCh = self.p.child('General Options')['Sort channels']
         #get channel to use as trigger
         try:
@@ -380,8 +353,8 @@ class CCEPFilter(GridFilter):
     self._saveFigs = state
   def setAutoDetect(self, state):
     self._autoDetect = state
-    self.trigChForm.setReadOnly(not state)
-  def setTrigCh(self, text):
+    #self.trigChForm.setReadOnly(not state)
+  def setDetectChannels(self, text):
     print(text)
     self._trigCh = text
       

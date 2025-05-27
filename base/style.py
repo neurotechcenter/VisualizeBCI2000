@@ -67,7 +67,6 @@ SpinBox {{
 }}
 QLineEdit {{
     font: 16px;
-    margin: 0.5em;
 }}
 QCheckBox {{
     font: 16px;
