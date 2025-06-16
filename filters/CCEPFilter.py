@@ -62,6 +62,10 @@ class TestBooleanParams(ptree.parameterTypes.GroupParameter):
     self.a = self.param('Sort channels')
     self.a.sigValueChanged.connect(self.aChanged)
 
+    self.addChild({'name': 'DBS Layout', 'type': 'bool', 'value': 0})
+    self.i = self.param('DBS Layout')
+    self.i.sigValueChanged.connect(self.iChanged)
+
     self.addChild({'name': 'Average CCEPS', 'type': 'bool', 'value': 0})
     self.b = self.param('Average CCEPS')
     self.b.sigValueChanged.connect(self.bChanged)
@@ -101,6 +105,8 @@ class TestBooleanParams(ptree.parameterTypes.GroupParameter):
   def gChanged(self):
     self.p.saveFigures()
   def hChanged(self):
+    self.p.clearFigures()
+  def iChanged(self):
     self.p.clearFigures()
 
 class CCEPFilter(GridFilter):
@@ -153,6 +159,7 @@ class CCEPFilter(GridFilter):
       self.p.restoreState(pState, addChildren=False, removeChildren=False)
     self._maxWindows = self.p.child('General Options')['Max Windows']
     self._sortChs = self.p.child('General Options')['Sort channels']
+    self._sortChs = self.p.child('General Options')['DBS Layout']
     self._trigCh = self.p.child('Auto Detect Options')['Detection channel']
 
   def saveSettings(self):
