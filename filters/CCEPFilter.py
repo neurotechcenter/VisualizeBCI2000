@@ -107,7 +107,7 @@ class TestBooleanParams(ptree.parameterTypes.GroupParameter):
   def hChanged(self):
     self.p.clearFigures()
   def iChanged(self):
-    self.p.clearFigures()
+    self.p.applyDBSLayout(self.i.value())
 
 class CCEPFilter(GridFilter):
   def __init__(self, area, bciPath, stream):
@@ -159,7 +159,7 @@ class CCEPFilter(GridFilter):
       self.p.restoreState(pState, addChildren=False, removeChildren=False)
     self._maxWindows = self.p.child('General Options')['Max Windows']
     self._sortChs = self.p.child('General Options')['Sort channels']
-    self._sortChs = self.p.child('General Options')['DBS Layout']
+    self._DBSLayout = self.p.child('General Options')['DBS Layout']
     self._trigCh = self.p.child('Auto Detect Options')['Detection channel']
 
   def saveSettings(self):
@@ -356,6 +356,40 @@ class CCEPFilter(GridFilter):
     #plot everything again with original order
     if hasattr(self, 'chTable'):
       self._renderPlots(newData=False)
+
+  
+  def applyDBSLayout(self, state):
+    if not hasattr(self, 'chTable') or not hasattr(self, 'tableRows'):
+        return
+
+    # If DBS layout is being turned off, revert to original order
+    if not state:
+        for ch in self.chTable.values():
+            ch.totalChanged(False)
+        self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
+        self._renderPlots(newData=False)
+        return
+
+    # Create separate lists for left and right hemisphere channels
+    left = []
+    right = []
+
+    for row in self.tableRows:
+        name = row.chName
+        if name.startswith("L") or "L_" in name:
+            left.append(row)
+        elif name.startswith("R") or "R_" in name:
+            right.append(row)
+
+    # Reorder the table
+    orderedRows = left + right
+    for i, row in enumerate(orderedRows):
+        self.table.setItem(i, Column.Name.value, QtWidgets.QTableWidgetItem(row.chName))
+        self.chTable[row.chName].setTableItem(i)
+
+    self._renderPlots(newData=False)
+
+
   def setSaveFigs(self, state):
     self._saveFigs = state
   def setAutoDetect(self, state):
