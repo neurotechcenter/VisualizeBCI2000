@@ -10,7 +10,7 @@ from base.SharedVisualization import saveFigure
 from enum import Enum
 from scipy.signal import find_peaks
 
-backgroundColor = (14, 14, 14)
+backgroundColor = (14, 14, 16)
 highlightColor = (60, 60, 40)
 highZValue = 1000
 
