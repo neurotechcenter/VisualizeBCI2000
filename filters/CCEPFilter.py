@@ -359,35 +359,36 @@ class CCEPFilter(GridFilter):
 
   
   def applyDBSLayout(self, state):
-    if not hasattr(self, 'chTable') or not hasattr(self, 'tableRows'):
+    if not hasattr(self, 'chTable') or not hasattr(self, 'tableRows'):    # ensures the self object has proper attributes
         return
 
-    # If DBS layout is being turned off, revert to original order
+    # if DBS layout is being turned off, revert to original order
     if not state:
         for ch in self.chTable.values():
-            ch.totalChanged(False)
-        self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)
+            ch.totalChanged(False)          # clear CCEP significance flags 
+        self.table.sortItems(Column.Name.value, QtCore.Qt.DescendingOrder)    # sorts rows in descending alphabetical order
         self._renderPlots(newData=False)
         return
 
-    # Create separate lists for left and right hemisphere channels
-    left = []
+    # create separate lists for left and right hemisphere channels
+    # initialize two empty lists
+    left = []     
     right = []
 
     for row in self.tableRows:
         name = row.chName
-        if name.startswith("L") or "L_" in name:
-            left.append(row)
-        elif name.startswith("R") or "R_" in name:
+        if "_L" in name:
+            left.append(row)      # add to left list
+        elif "_R" in name:
             right.append(row)
 
-    # Reorder the table
-    orderedRows = left + right
+    # reorder the table
+    orderedRows = left + right  # concatenates left and right lists
     for i, row in enumerate(orderedRows):
         self.table.setItem(i, Column.Name.value, QtWidgets.QTableWidgetItem(row.chName))
         self.chTable[row.chName].setTableItem(i)
 
-    self._renderPlots(newData=False)
+    self._renderPlots(newData=False)    # redraw plots in new order, ensures it does not recompute data
 
 
   def setSaveFigs(self, state):
