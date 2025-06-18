@@ -9,6 +9,7 @@ from filters.filterBase.GridFilter import GridFilter
 from base.SharedVisualization import saveFigure
 from enum import Enum
 from scipy.signal import find_peaks
+from math import ceil
 
 backgroundColor = (14, 14, 16)
 highlightColor = (60, 60, 40)
@@ -401,7 +402,7 @@ class CCEPFilter(GridFilter):
     self._trigCh = text
       
   def msToSamples(self, lengthMs):
-    return int(lengthMs * self.sr/1000.0)
+    return int(ceil(lengthMs * self.sr/1000.0))
 
   def updateParameter(self, latStart, newLat):
     if newLat != self.trigLatLength:
