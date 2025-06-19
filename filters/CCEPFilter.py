@@ -9,6 +9,7 @@ from filters.filterBase.GridFilter import GridFilter
 from base.SharedVisualization import saveFigure
 from enum import Enum
 from scipy.signal import find_peaks
+from math import ceil
 
 backgroundColor = (14, 14, 14)
 highlightColor = (60, 60, 40)
@@ -186,7 +187,7 @@ class CCEPFilter(GridFilter):
       aocs = []
       chunk = False
       peaks = None
-      if self.p.child('Auto Detect Options')['Detection channel']:
+      if self.p.child('Auto Detect Options')['Enable auto-detection']:
         #trigCh = self.p.child('General Options')['Sort channels']
         #get channel to use as trigger
         try:
@@ -359,7 +360,7 @@ class CCEPFilter(GridFilter):
     self._trigCh = text
       
   def msToSamples(self, lengthMs):
-    return int(lengthMs * self.sr/1000.0)
+    return int(ceil(lengthMs * self.sr/1000.0))
 
   def updateParameter(self, latStart, newLat):
     if newLat != self.trigLatLength:
