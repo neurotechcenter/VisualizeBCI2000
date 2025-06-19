@@ -194,7 +194,8 @@ class CCEPFilter(GridFilter):
       aocs = []
       chunk = False
       peaks = None
-      if self.p.child('Auto Detect Options')['Detection channel']:
+      #if self.p.child('Auto Detect Options')['Detection channel']:
+      if self.p.child('Auto Detect Options')['Enable auto-detection']:
         #trigCh = self.p.child('General Options')['Sort channels']
         #get channel to use as trigger
         try:
