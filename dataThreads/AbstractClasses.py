@@ -6,6 +6,7 @@ class AbstractDataThread(QObject):
   #QThread signal/slots 
   propertiesSignal = pyqtSignal(int, list) #num of elements, ch names
   dataSignal       = pyqtSignal(np.ndarray)
+  stateSignal  = pyqtSignal(object)
   parameterSignal  = pyqtSignal(object)
   printSignal      = pyqtSignal(str)
 

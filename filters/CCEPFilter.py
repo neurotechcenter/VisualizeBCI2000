@@ -108,6 +108,13 @@ class CCEPFilter(GridFilter):
   def __init__(self, area, bciPath, stream):
     super().__init__(area, bciPath, stream)
     self.aucThresh = 0
+    self.numTrigs = 0
+
+  #define shared states we need for filter
+  @property
+  def sharedStates(self):
+    return ["CCEPTriggered", "StimulatingChannel"]
+
   def publish(self):
     super().publish()
 
@@ -167,21 +174,29 @@ class CCEPFilter(GridFilter):
   def checkPlot(self):
     return self.comm.evaluate("CCEPTriggered")
   
+  #define abstract methods
+  def receiveStates(self, state):
+    #get CCEPTriggered state to detect CCEPs
+    self.numTrigs += np.count_nonzero(state[0])
+
+    #find stim ch if possible
+    stimCh = state[1].nonzero()[0]
+    if stimCh:
+      #just get first non-zero value
+      chBits = state[1][stimCh[0]]
+      self.stimChs.clear()
+      chBinary = str("{0:b}".format(chBits))
+      for b in range(len(chBinary)): #32 bit state
+        if chBinary[len(chBinary) - b - 1] == '1':
+          #print(self.chNames[b] + " at " + str(b))
+          self.stimChs.append(self.chNames[b]) #append ch name
+
+  
   def plot(self, data):
-    if self.checkPlot():
+    #if self.checkPlot():
+    if self.numTrigs > 0:
       print("plotting")
-      #get stim ch if we can
-      try:
-        chBits = self.comm.evaluate("StimulatingChannel")
-      except:
-        chBits = 0
-      if chBits != 0:
-        self.stimChs.clear()
-        chBinary = str("{0:b}".format(chBits))
-        for b in range(len(chBinary)): #32 bit state
-          if chBinary[len(chBinary) - b - 1] == '1':
-            #print(self.chNames[b] + " at " + str(b))
-            self.stimChs.append(self.chNames[b]) #append ch name
+      self.numTrigs -= 1
 
       #process data
       aocs = []

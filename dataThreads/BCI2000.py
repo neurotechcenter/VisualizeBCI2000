@@ -19,9 +19,9 @@ from dataThreads.AbstractClasses import *
 # Acquires signals and states, their properties, and parameters
 #
 class BCI2000(AbstractCommunication):
-  def __init__(self, bciPath, file):
+  def __init__(self, bciPath, file, sharedStates):
     self._acqThr = BCI2000DataThread()
-    self._worker = BCI2000Worker(bciPath, file)
+    self._worker = BCI2000Worker(bciPath, file, sharedStates)
 
   @property
   def worker(self):
@@ -44,11 +44,12 @@ def BCI2000Instance(bciPath):
     sys.exit("Could not access BCI2000Remote.dll! Make sure BCI2000/prog is in your path")
 
 class BCI2000Worker(AbstractWorker):
-  def __init__(self, bciPath, className):
+  def __init__(self, bciPath, className, sharedStates):
     super().__init__()
     self.bci = BCI2000Instance(bciPath)
     self.bci.Connect()
     self.className = className
+    self.sharedStateList = sharedStates
     self.initialized = False
     self.go = True
     self.oldSystemState = ""
@@ -72,6 +73,8 @@ class BCI2000Worker(AbstractWorker):
       if not self._isRunning: return
 
     #access sharing parameter
+    ready = False
+    p = ""
     while True:
       try:
         p = self.bci.GetParameter(f'Share{self.className}')
@@ -80,12 +83,36 @@ class BCI2000Worker(AbstractWorker):
           self.bci.Execute(f'SET PARAMETER Share{self.className} localhost:1897')
           QThread.msleep(50) #sleep for 50ms before accessing new parameter
         else:
-          self.initSignal.emit(p)
+          ready = True
           break
       except:
         self.logPrint.emit(f'Parameter Share{self.className} does not exist! Cannot acquire data')
         break
 
+    #access shared states parameter
+    #p = self.bci.GetParameter(f'Share{self.className}')
+    if ready:
+      if self.sharedStateList:
+        sts = " ".join(self.sharedStateList)
+        while True:
+          try:
+            stP = self.bci.GetParameter(f'Share{self.className}States')
+            if stP == f"Parameter Share{self.className}States is empty":
+              self.bci.Execute(f'SET PARAMETER % list Share{self.className}States= {len(self.sharedStateList)} {sts}')
+              QThread.msleep(50)
+            else:
+              #we are ready to start data thread!
+              self.initSignal.emit(p)
+              break
+          except:
+            self.logPrint.emit(f'Parameter Share{self.className}States is not properly populated! Cannot acquire data')
+            break
+      else:
+        #we are ready to start data thread!
+        self.initSignal.emit(p)
+
+
+    #wait in loop until BCI2000 has quit to disconnect
     while self._isRunning:
       try:
         QThread.sleep(1)
@@ -135,10 +162,28 @@ class BCI2000DataThread(AbstractDataThread):
     self.printSignal.emit("Waiting for BCI2000 on %s at port %s" %(address[0], address[1]))
     self.s.settimeout(0.1)        
     
+  def receiveSignal(self, msg):
+    if msg.shm not in self.memInfo:
+      memObj = shared_memory.SharedMemory(msg.shm)
+      self.memInfo[msg.shm] = memObj
+    else:
+      memObj = self.memInfo[msg.shm]
+
+    #find correct type for parsing
+    thisType = np.double
+    if msg.type == "int32":
+      thisType = np.uint32
+    elif msg.type == "int16":
+      thisType = np.uint16
+    signal = np.ndarray((msg.channels, msg.elements),dtype=thisType, buffer=memObj.buf)
+    return signal
+
   def run(self):
     while self._isRunning:
+      self.memInfo = {}
       #listen for connection on specified port
       memoryName = ""
+      stMemoryName = ""
       try:
         self.waitForRead(self.s)
         conn, addr = self.s.accept()
@@ -157,20 +202,14 @@ class BCI2000DataThread(AbstractDataThread):
             pass
           
           elif msg.kind == 'Signal' and msg.sourceID == 'Signal':
-            if memoryName != msg.shm:
-              # update shared memory object
-              memoryName = msg.shm
-              mem = shared_memory.SharedMemory(memoryName)
-            
-            #update visualization with new data
-            data = np.ndarray((msg.channels, msg.elements),dtype=np.double, buffer=mem.buf)
-            self.dataSignal.emit(data)
+            self.dataSignal.emit(self.receiveSignal(msg))
 
           elif msg.kind == 'Parameter':
             self.parameterSignal.emit(msg.param)
             continue
 
           elif msg.kind == 'Signal' and msg.sourceID == 'States':
+            self.stateSignal.emit(self.receiveSignal(msg))
             pass
 
           elif msg.kind == 'SysCommand' and msg.command == 'EndOfData':

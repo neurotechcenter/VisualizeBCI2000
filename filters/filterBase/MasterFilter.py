@@ -17,6 +17,17 @@ class MasterFilter(Group):
   def plot(self, data):
     pass
 
+  @abstractmethod
+  def receiveStates(self, state):
+    pass
+
+  #must be defined for each filter
+  #defines states that will be used by the filter to be shared in BCI2000
+  @property
+  @abstractmethod
+  def sharedStates(self):
+    pass
+
   def __init__(self, area, bciPath, stream):
     self.bciPath = bciPath
     self.streamName = stream
@@ -32,6 +43,7 @@ class MasterFilter(Group):
     self.t2.started.connect(self.comm.acqThr.run)
     self.comm.acqThr.propertiesSignal.connect(self.propertiesAcquired)
     self.comm.acqThr.dataSignal.connect(self.plot)
+    self.comm.acqThr.stateSignal.connect(self.receiveStates)
     self.comm.acqThr.parameterSignal.connect(self.parameterReceived)
     self.comm.acqThr.printSignal.connect(self.logPrint)
 
@@ -95,7 +107,7 @@ class MasterFilter(Group):
   def setDataStream(self, bciPath, path, file):
     try:
       mod = importlib.import_module(path + "." + file)
-      return mod.__dict__[file](bciPath, self.__class__.__name__)
+      return mod.__dict__[file](bciPath, self.__class__.__name__, self.sharedStates)
     except:
       #self.logPrint(f"Data thread could not be loaded! Chosen stream: {file}")
       traceback.print_exc()
