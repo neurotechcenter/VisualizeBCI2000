@@ -169,13 +169,7 @@ class BCI2000DataThread(AbstractDataThread):
     else:
       memObj = self.memInfo[msg.shm]
 
-    #find correct type for parsing
-    thisType = np.double
-    if msg.type == "int32":
-      thisType = np.uint32
-    elif msg.type == "int16":
-      thisType = np.uint16
-    signal = np.ndarray((msg.channels, msg.elements),dtype=thisType, buffer=memObj.buf)
+    signal = np.ndarray((msg.channels, msg.elements),dtype=np.double, buffer=memObj.buf)
     return signal
 
   def run(self):
@@ -209,7 +203,8 @@ class BCI2000DataThread(AbstractDataThread):
             continue
 
           elif msg.kind == 'Signal' and msg.sourceID == 'States':
-            self.stateSignal.emit(self.receiveSignal(msg))
+            #round incoming signal to nearest int
+            self.stateSignal.emit(np.round(self.receiveSignal(msg)))
             pass
 
           elif msg.kind == 'SysCommand' and msg.command == 'EndOfData':

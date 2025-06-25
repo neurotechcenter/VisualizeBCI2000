@@ -110,10 +110,6 @@ class CCEPFilter(GridFilter):
     self.aucThresh = 0
     self.numTrigs = 0
 
-  #define shared states we need for filter
-  @property
-  def sharedStates(self):
-    return ["CCEPTriggered", "StimulatingChannel"]
 
   def publish(self):
     super().publish()
@@ -173,6 +169,11 @@ class CCEPFilter(GridFilter):
   #an attempt to abstract plotting from BCI2000
   def checkPlot(self):
     return self.comm.evaluate("CCEPTriggered")
+  
+  #define shared states we need for filter
+  @property
+  def sharedStates(self):
+    return ["CCEPTriggered", "StimulatingChannel"]
   
   #define abstract methods
   def receiveStates(self, state):
