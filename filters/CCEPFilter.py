@@ -181,16 +181,17 @@ class CCEPFilter(GridFilter):
     self.numTrigs += np.count_nonzero(state[0])
 
     #find stim ch if possible
-    stimCh = state[1].nonzero()[0]
-    if stimCh:
-      #just get first non-zero value
-      chBits = state[1][stimCh[0]]
-      self.stimChs.clear()
-      chBinary = str("{0:b}".format(chBits))
-      for b in range(len(chBinary)): #32 bit state
-        if chBinary[len(chBinary) - b - 1] == '1':
-          #print(self.chNames[b] + " at " + str(b))
-          self.stimChs.append(self.chNames[b]) #append ch name
+    if np.shape(state)[0] > 1:
+      stimCh = state[1].nonzero()[0]
+      if stimCh:
+        #just get first non-zero value
+        chBits = state[1][stimCh[0]]
+        self.stimChs.clear()
+        chBinary = str("{0:b}".format(chBits))
+        for b in range(len(chBinary)): #32 bit state
+          if chBinary[len(chBinary) - b - 1] == '1':
+            #print(self.chNames[b] + " at " + str(b))
+            self.stimChs.append(self.chNames[b]) #append ch name
 
   
   def plot(self, data):

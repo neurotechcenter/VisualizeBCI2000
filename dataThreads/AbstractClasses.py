@@ -6,9 +6,10 @@ class AbstractDataThread(QObject):
   #QThread signal/slots 
   propertiesSignal = pyqtSignal(int, list) #num of elements, ch names
   dataSignal       = pyqtSignal(np.ndarray)
-  stateSignal  = pyqtSignal(object)
+  stateSignal      = pyqtSignal(object)
   parameterSignal  = pyqtSignal(object)
   printSignal      = pyqtSignal(str)
+  disconnected     = pyqtSignal()
 
   @abstractmethod
   def stop(self):
@@ -23,7 +24,6 @@ class AbstractDataThread(QObject):
     pass
   
 class AbstractWorker(QObject):
-  disconnected = pyqtSignal()
   initSignal = pyqtSignal(str) #address, e.g., "localhost:1890"
   logPrint = pyqtSignal(str)
 

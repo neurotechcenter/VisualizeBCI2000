@@ -41,25 +41,26 @@ def BCI2000Instance(bciPath):
     BCI2000Remote = importlib.import_module('BCI2000Remote') #in prog folder
     return BCI2000Remote.BCI2000Remote() #init BCI2000 remote
   except:
-    sys.exit("Could not access BCI2000Remote.dll! Make sure BCI2000/prog is in your path")
+    sys.exit("Could not access BCI2000Remote.py! Make sure BCI2000/prog is in your path")
 
 class BCI2000Worker(AbstractWorker):
   def __init__(self, bciPath, className, sharedStates):
     super().__init__()
-    self.bci = BCI2000Instance(bciPath)
-    self.bci.Connect()
+    self.bciPath = bciPath
+    self.startRemote()
     self.className = className
     self.sharedStateList = sharedStates
     self.initialized = False
     self.go = True
     self.oldSystemState = ""
     self._isRunning = True
+    self.startedDataThread = False
   def stop(self):
     self._isRunning = False
-  def waitForState(self, state):
-    print(f'waiting for {state}...')
-    self.bci.Execute(f'WAIT FOR {state}')
-    self.initSignal.emit()
+  def startRemote(self):
+    self.bci = BCI2000Instance(self.bciPath)
+    self.bci.Disconnect()
+    self.bci.Connect()
   def run(self):
     notConnected = True
     while notConnected:
@@ -67,7 +68,7 @@ class BCI2000Worker(AbstractWorker):
       notConnected = self.bci.Result == 'false'
       st = self.bci.GetSystemState()
       if st == "Suspended":
-        self.logPrint.emit("Press Set Config to connect...")
+        self.logPrint.emit("Press Set Config twice to connect...")
       elif st == "Running":
         self.logPrint.emit("Stop the run to connect...")
       if not self._isRunning: return
@@ -96,35 +97,33 @@ class BCI2000Worker(AbstractWorker):
         sts = " ".join(self.sharedStateList)
         while True:
           try:
+            #suppress error messages first, bc for some reason
+            #getting an empty parameter gives an error
+            self.bci.Execute('SET LogLevel 1')
+            self.bci.Execute('SET AbortOnError 0')
+            #silently check parameter
             stP = self.bci.GetParameter(f'Share{self.className}States')
-            if stP == f"Parameter Share{self.className}States is empty":
+            if stP == f"Parameter Share{self.className}States is empty" or stP == "":
               self.bci.Execute(f'SET PARAMETER % list Share{self.className}States= {len(self.sharedStateList)} {sts}')
               QThread.msleep(50)
             else:
               #we are ready to start data thread!
-              self.initSignal.emit(p)
+              if not self.startedDataThread:
+                self.initSignal.emit(p)
+                self.startedDataThread = True
               break
           except:
             self.logPrint.emit(f'Parameter Share{self.className}States is not properly populated! Cannot acquire data')
             break
       else:
         #we are ready to start data thread!
-        self.initSignal.emit(p)
+        if not self.startedDataThread:
+          self.initSignal.emit(p)
+          self.startedDataThread = True
 
-
-    #wait in loop until BCI2000 has quit to disconnect
-    while self._isRunning:
-      try:
-        QThread.sleep(1)
-        st = self.bci.GetSystemState()
-        if st == "Idle" or st == "":
-          break
-      except:
-        break
-      
-    #we have disconnected from bci2000
-    print("DISCONNECTED")
-    self.disconnected.emit()
+    #bring error messages back
+    self.bci.Execute('SET LogLevel 1')
+    self.bci.Execute('SET AbortOnError 1')
 
 class BCI2000DataThread(AbstractDataThread):
   def __init__(self):
@@ -159,7 +158,6 @@ class BCI2000DataThread(AbstractDataThread):
           + message[1])
       sys.exit()
     self.s.listen(1)
-    self.printSignal.emit("Waiting for BCI2000 on %s at port %s" %(address[0], address[1]))
     self.s.settimeout(0.1)        
     
   def receiveSignal(self, msg):
@@ -176,9 +174,9 @@ class BCI2000DataThread(AbstractDataThread):
     while self._isRunning:
       self.memInfo = {}
       #listen for connection on specified port
-      memoryName = ""
-      stMemoryName = ""
       try:
+        address = self.s.getsockname()
+        self.printSignal.emit("Waiting for BCI2000 at %s:%s" %(address[0], address[1]))
         self.waitForRead(self.s)
         conn, addr = self.s.accept()
         self.printSignal.emit(f"Connected by {addr}")
@@ -218,7 +216,7 @@ class BCI2000DataThread(AbstractDataThread):
             raise RuntimeError('Unexpected BCI2000 message')
 
       except EOFError:
-        print('disconnected')
+        self.disconnected.emit()
         QThread.sleep(1) #wait for update if we are disconnected from BCI2000
         if not self._isRunning:
           print('stopping acq thread')

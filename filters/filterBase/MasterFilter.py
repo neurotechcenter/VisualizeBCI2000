@@ -46,6 +46,7 @@ class MasterFilter(Group):
     self.comm.acqThr.stateSignal.connect(self.receiveStates)
     self.comm.acqThr.parameterSignal.connect(self.parameterReceived)
     self.comm.acqThr.printSignal.connect(self.logPrint)
+    self.comm.acqThr.disconnected.connect(self.resetConnection)
 
     #BCI2000
     self.t1 = QThread()
@@ -53,7 +54,6 @@ class MasterFilter(Group):
     self.t1.started.connect(self.comm.worker.run)
     self.comm.worker.initSignal.connect(self.getParameters)
     self.comm.worker.logPrint.connect(self.logPrint)
-    self.comm.worker.disconnected.connect(self.stop)
     print("starting BCI2000 thread")
     self.t1.start()
 
@@ -65,6 +65,18 @@ class MasterFilter(Group):
     self.logPrint(f'Acquiring {self.channels} channels')
     self.chNamesSignal.emit(self.chNames)
     pass
+
+  def resetConnection(self):
+    try: #try to reset connection to BCI2000 if we can
+      if not self.comm.worker.bci.GetSystemState() == "Resting":
+        self.t1.sleep(1)
+        self.comm.worker.startRemote()
+        self.t1.quit()
+        self.t1.wait()
+        self.t1.start()
+    except:
+      pass
+
   def stop(self):
     print("STOPPING")
     self.comm.worker.stop()
