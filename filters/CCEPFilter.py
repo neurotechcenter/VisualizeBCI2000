@@ -20,44 +20,54 @@ class Column(Enum):
   Electrode = 1
   Sig = 2
   AUC = 3
+class RefCombo(Enum):
+  Average = 0
+  Maximum = 1
 
-#taken from pyqtgraph example
-## test add/remove
-## this group includes a menu allowing the user to add new parameters into its child list
 class ScalableGroup(ptree.parameterTypes.GroupParameter):
-    def __init__(self, p, **opts):
-        opts['type'] = 'group'
-        opts['addText'] = "Add"
-        opts['addList'] = ['str', 'float', 'int']
-        ptree.parameterTypes.GroupParameter.__init__(self, **opts)
-        self.p = p
+  def __init__(self, p, **opts):
+    opts['type'] = 'group'
+    ptree.parameterTypes.GroupParameter.__init__(self, **opts)
+    self.p = p
 
-        #enable/disable
-        self.addChild({'name': 'Enable auto-detection', 'type': 'bool', 'value': 0})
-        self.a = self.param('Enable auto-detection')
-        self.a.sigValueChanged.connect(self.aChanged)
-        #reference channel
-        self.addChild({'name': 'Detection channel', 'type': 'str', 'value': "2", 'tip': 'Index or name'})
-        self.b = self.param('Detection channel')
-        self.b.sigValueChanged.connect(self.aChanged)
-    def aChanged(self):
-      self.p.setAutoDetect(self.a.value())
-    def bChanged(self):
-      self.p.setDetectChannels(self.b.value())
-    
-    def addNew(self, typ):
-        val = {
-            'str': '',
-            'float': 0.0,
-            'int': 0
-        }[typ]
-        self.addChild(dict(name="ScalableParam %d" % (len(self.childs)+1), type=typ, value=val, removable=True, renamable=True))
+    #enable/disable
+    self.addChild({'name': 'Enable auto-detection', 'type': 'bool', 'value': 0})
+    self.a = self.param('Enable auto-detection')
+    self.a.sigValueChanged.connect(self.aChanged)
+    #choose detection channel behavior
+    chOptionsList = ptree.parameterTypes.ListParameter(name='Combination Options', limits=[opt.name for opt in RefCombo])
+    self.addChild(chOptionsList)
+    self.c = chOptionsList
+    self.c.sigValueChanged.connect(self.cChanged)
+
+    #text box for displaying selected channels
+    self.selTextBox = ptree.parameterTypes.TextParameter(name='Selected Channels', readonly=True)
+    self.addChild(self.selTextBox)
+    #checklist for detection channels
+    self.chGroup = ptree.parameterTypes.ChecklistParameter(name='Detection Channels')
+    self.addChild(self.chGroup)
+    self.chGroup.sigValueChanging.connect(self.checkChanged)
+    self.chGroup.sigValueChanged.connect(self.checkChanged)
+    self.chList = []
+
+  def aChanged(self):
+    self.p.setAutoDetect(self.a.value())
+  def cChanged(self):
+    self.p.setRefChOptions(self.c.value())
+  def checkChanged(self, val, ev):
+    if self.chList != ev:
+      self.chList = ev
+      if len(ev)>0:
+        listStr = ev[0]
+        for el in ev[1:]:
+          listStr += ", " + str(el)
+      else:
+        listStr = ""
+      self.selTextBox.setValue(listStr)  
 
 class TestBooleanParams(ptree.parameterTypes.GroupParameter):
   def __init__(self, p, **opts):
     self.p = p
-    #opts['type'] = 'bool'
-    #opts['value'] = True
     ptree.parameterTypes.GroupParameter.__init__(self, **opts)
     self.addChild({'name': 'Sort channels', 'type': 'bool', 'value': 0})
     self.a = self.param('Sort channels')
@@ -122,18 +132,17 @@ class CCEPFilter(GridFilter):
     settingsLab = QtWidgets.QLabel("Settings", objectName="h1")
 
     #create parameter tree
+    self.autoParam = ScalableGroup(name="Auto Detect Options", p=self, tip='Click to add channels', readonly=False)
     params = [
         TestBooleanParams(name= 'General Options', p=self, showTop=False),
-        ScalableGroup(name="Auto Detect Options", p=self, tip='Click to add channels'),
+        self.autoParam,
     ]
 
     self.p = ptree.Parameter.create(name="Settings", type='group', children=params, title=None)
     self.t = ptree.ParameterTree()
     self.t.setParameters(self.p)
-    #self.t.setParameters(params)
-    #self.t.resizeColumnToContents(0)
+
     self.t.header().setSectionResizeMode(pg.QtWidgets.QHeaderView.Stretch)
-    #self.t.show()
     settingsD.addWidget(settingsLab)
     settingsD.addWidget(self.t)
 
@@ -150,14 +159,12 @@ class CCEPFilter(GridFilter):
     self._maskEnd = self.settings.value("maskEnd", 15)
 
     pState = self.settings.value("pState", {})
-    # if hasattr(pState, 'children'):
-    #   children = pState['children']
 
     if pState != {}:
       self.p.restoreState(pState, addChildren=False, removeChildren=False)
     self._maxWindows = self.p.child('General Options')['Max Windows']
     self._sortChs = self.p.child('General Options')['Sort channels']
-    self._trigCh = self.p.child('Auto Detect Options')['Detection channel']
+    self._comboOpt = RefCombo[self.p.child('Auto Detect Options')['Combination Options']]
 
   def saveSettings(self):
     super().saveSettings()
@@ -207,30 +214,30 @@ class CCEPFilter(GridFilter):
       if self.p.child('Auto Detect Options')['Enable auto-detection']:
         #trigCh = self.p.child('General Options')['Sort channels']
         #get channel to use as trigger
+        refIndices = []
         try:
-          chIndex = int(self._trigCh)
-        except ValueError:
-          try:
-            #not index, gotta be ch name
-            chIndex = self.chNames.index(self._trigCh)
-          except:
-            self.logPrint(self._trigCh + " is not a valid channel name")
-            chIndex = 1
-        self.trigData = data[chIndex - 1] #convert to 0-based
-
-        #get chunks by peaks
-        #hard code parameters just to test
-        peaks, properties = find_peaks(self.trigData, 100, distance=10)
-        print(f"Found {len(peaks)} peaks")
-        if len(peaks) <= 1:
-          chunk = False
+          for ch in self.autoParam.chList:
+            refIndices.append(self.chNames.index(ch))
+        except:
+          self.logPrint("Detection chs have an invalid channel name")
+        if len(refIndices) == 0:
+          self.logPrint('Cannot auto-detect without Detection Channels specified!')
         else:
-          chunk = True
+          refIndices = np.array(refIndices)
+          if self._comboOpt == RefCombo.Average:
+            self.trigData =  np.mean(data[refIndices - 1, :],axis=0)
+          elif self._comboOpt == RefCombo.Maximum:
+            self.trigData = np.max(data[refIndices - 1, :], axis=0)
+          #self.trigData = data[chIndex - 1] #convert to 0-based
 
-        # #chunk based off artifact
-        # for i, ch in enumerate(self.chTable.values()):
-        #   ch.chunkData(data[i], peaks) #chunks and computes
-        #   aocs.append(ch.auc)
+          #get chunks by peaks
+          #hard code parameters just to test
+          peaks, properties = find_peaks(self.trigData, 500, distance=10)
+          print(f"Found {len(peaks)} peaks")
+          if len(peaks) <= 1:
+            chunk = False
+          else:
+            chunk = True
       
       #compute and chunk data
       avgPlots = self.p.child('General Options')['Average CCEPS']
@@ -244,7 +251,7 @@ class CCEPFilter(GridFilter):
       #send processed data
       self.dataProcessedSignal.emit(aocs)
 
-      #we scale by 10 cause slider can only do ints
+      #set threshold
       stds = self.p.child('General Options')['Threshold (STD)']
       self.aucThresh = np.std(aocs) * stds
 
@@ -349,6 +356,9 @@ class CCEPFilter(GridFilter):
     self.table.itemSelectionChanged.connect(self._selectionChanged)
     #self.table.itemChanged.connect(self._itemChanged)
 
+    #set parameter tree
+    self.autoParam.chGroup.setLimits(self.chNames)
+
   def setStdDevState(self, value):
     self._stds = value
     #self.stdSpin.setToolTip(str(value/10))
@@ -371,10 +381,8 @@ class CCEPFilter(GridFilter):
     self._saveFigs = state
   def setAutoDetect(self, state):
     self._autoDetect = state
-    #self.trigChForm.setReadOnly(not state)
-  def setDetectChannels(self, text):
-    print(text)
-    self._trigCh = text
+  def setRefChOptions(self, val):
+    self._comboOpt = RefCombo[val]
       
   def msToSamples(self, lengthMs):
     return int(ceil(lengthMs * self.sr/1000.0))
