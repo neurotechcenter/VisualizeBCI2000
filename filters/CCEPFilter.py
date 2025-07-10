@@ -238,40 +238,42 @@ class CCEPFilter(GridFilter):
       chunk = False
       peaks = None
       if self.p.child('Auto Detect Options')['Enable auto-detection']:
-        #trigCh = self.p.child('General Options')['Sort channels']
-        #get channel to use as trigger
-        refIndices = []
-        try:
-          for ch in self.autoParam.chList:
-            refIndices.append(self.chNames.index(ch))
-        except:
-          self.logPrint("Detection chs have an invalid channel name")
-        if len(refIndices) == 0:
-          self.logPrint('Cannot auto-detect without Detection Channels specified!')
+        #get channels to use as trigger
+        if not self.autoParam.chList:
+          self.logPrint("Cannot auto-detect peaks without a detection channel!")
         else:
-          refIndices = np.array(refIndices)
-          if self._comboOpt == RefCombo.Average:
-            self.trigData =  np.mean(data[refIndices - 1, :],axis=0)
-          elif self._comboOpt == RefCombo.Maximum:
-            self.trigData = np.max(data[refIndices - 1, :], axis=0)
-          #self.trigData = data[chIndex - 1] #convert to 0-based
-
-          #get chunks by peaks
-          #hard code parameters just to test
-          peaks, properties = find_peaks(self.trigData, 500, distance=10)
-          print(f"Found {len(peaks)} peaks")
-          if len(peaks) <= 1:
-            chunk = False
+          refIndices = []
+          try:
+            for ch in self.autoParam.chList:
+              refIndices.append(self.chNames.index(ch))
+          except:
+            self.logPrint("Detection chs have an invalid channel name")
+          if len(refIndices) == 0:
+            self.logPrint('Cannot auto-detect without Detection Channels specified!')
           else:
-            chunk = True
+            if self._comboOpt == RefCombo.Average:
+              self.trigData =  np.mean(data[refIndices, :],axis=0)
+            elif self._comboOpt == RefCombo.Maximum:
+              self.trigData = np.max(data[refIndices, :], axis=0)
+            #remove mean before peak detection
+            self.trigData -= np.mean(self.trigData)
 
-          #plot detection plot
-          pltItem = self.autoParam.fig.value()
-          pltItem.clear()
-          pltItem.plot(x=self.detectX, y=self.trigData)
-          for peak in peaks:
-            pltItem.addLine(x=self.detectX[peak], pen={'color': "#d94350", 'width': 2})
-          self.autoParam.fig.setValue(pltItem)
+            #get chunks by peaks
+            #hard code parameters just to test
+            peaks, properties = find_peaks(self.trigData, 200, width=(None,20), threshold=20, distance=10)
+            print(f"Found {len(peaks)} peaks")
+            if len(peaks) <= 1:
+              chunk = False
+            else:
+              chunk = True
+
+            #plot detection plot
+            pltItem = self.autoParam.fig.value()
+            pltItem.clear()
+            for peak in peaks:
+              pltItem.addLine(x=self.detectX[peak], pen={'color': "#d94350", 'width': 3})
+            pltItem.plot(x=self.detectX, y=self.trigData)
+            self.autoParam.fig.setValue(pltItem)
       
       #compute and chunk data
       avgPlots = self.p.child('General Options')['Average CCEPS']
@@ -725,8 +727,11 @@ class CCEPCalc():
       #stdBase = np.std(self.rawData[:self.p.baseSamples], dtype=np.float64)
       self.data = np.subtract(newData, avBase)
 
-    #store data
-    self.database.append(self.data.copy())
+    if np.shape(self.data) != np.shape(self.p.x):
+      self.p.logPrint(f"Expected: {np.shape(self.p.x)}, received: {np.shape(self.data)}")
+    else:
+      #store data
+      self.database.append(self.data.copy())
 
     #possibly change to average, before we detect ccep
     if avgPlots:
