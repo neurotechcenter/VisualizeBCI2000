@@ -24,6 +24,23 @@ class RefCombo(Enum):
   Average = 0
   Maximum = 1
 
+
+class FigureParameterItem(ptree.parameterTypes.WidgetParameterItem):
+  def makeWidget(self):
+    self.asSubItem = True #places it in 2nd column
+    w = pg.PlotWidget(title="Detection Output")
+    w.setMinimumSize(100,100)
+    w.sigChanged = w.sigRangeChanged 
+    w.value = w.getPlotItem
+    w.setValue = w.setCentralItem
+    self.hideWidget = False
+    return w
+
+class FigureParameter(ptree.Parameter):
+  itemClass = FigureParameterItem
+  def __init__(self, **opts):
+    super().__init__(**opts)
+
 class ScalableGroup(ptree.parameterTypes.GroupParameter):
   def __init__(self, p, **opts):
     opts['type'] = 'group'
@@ -39,6 +56,10 @@ class ScalableGroup(ptree.parameterTypes.GroupParameter):
     self.addChild(chOptionsList)
     self.c = chOptionsList
     self.c.sigValueChanged.connect(self.cChanged)
+    #custom fig param
+    ptree.registerParameterType("fig", FigureParameter)
+    self.fig  = FigureParameter(name="Peak Detection Plot")
+    self.addChild(self.fig)
 
     #text box for displaying selected channels
     self.selTextBox = ptree.parameterTypes.TextParameter(name='Selected Channels', readonly=True)
@@ -135,7 +156,7 @@ class CCEPFilter(GridFilter):
     self.autoParam = ScalableGroup(name="Auto Detect Options", p=self, tip='Click to add channels', readonly=False)
     params = [
         TestBooleanParams(name= 'General Options', p=self, showTop=False),
-        self.autoParam,
+        self.autoParam
     ]
 
     self.p = ptree.Parameter.create(name="Settings", type='group', children=params, title=None)
@@ -171,6 +192,11 @@ class CCEPFilter(GridFilter):
 
     self.settings.setValue("maskStart", self._maskStart)
     self.settings.setValue("maskEnd", self._maskEnd)
+    #delete detection graph before saving
+    try:
+      self.autoParam.fig.remove()
+    except:
+      pass
     self.settings.setValue("pState", self.p.saveState())
 
   #an attempt to abstract plotting from BCI2000
@@ -238,6 +264,14 @@ class CCEPFilter(GridFilter):
             chunk = False
           else:
             chunk = True
+
+          #plot detection plot
+          pltItem = self.autoParam.fig.value()
+          pltItem.clear()
+          pltItem.plot(x=self.detectX, y=self.trigData)
+          for peak in peaks:
+            pltItem.addLine(x=self.detectX[peak], pen={'color': "#d94350", 'width': 2})
+          self.autoParam.fig.setValue(pltItem)
       
       #compute and chunk data
       avgPlots = self.p.child('General Options')['Average CCEPS']
@@ -358,6 +392,21 @@ class CCEPFilter(GridFilter):
 
     #set parameter tree
     self.autoParam.chGroup.setLimits(self.chNames)
+    #set detection plot with settings
+    pltItem = self.autoParam.fig.value()
+    #prepare view
+    axView = pltItem.getViewBox()
+    axView.disableAutoRange()
+    #axView.setMouseEnabled(x=False, y=True)
+    axView.setDefaultPadding(0)
+    xLim = self.getParameterValue("PreStimLength")
+    yLim = self.getParameterValue("PostStimLength")
+    #redefine element size
+    self.detectX = np.linspace(-xLim, yLim, self.msToSamples(xLim) + self.msToSamples(yLim))
+    axView.setXRange(-xLim, yLim, padding=0)
+    axView.setYRange(-1000, 1000)
+    #set it back after adjustments
+    self.autoParam.fig.setValue(pltItem)
 
   def setStdDevState(self, value):
     self._stds = value
