@@ -216,15 +216,18 @@ class CCEPFilter(GridFilter):
     #find stim ch if possible
     if np.shape(state)[0] > 1:
       stimCh = state[1].nonzero()[0]
-      if stimCh:
+      if stimCh.any():
         #just get first non-zero value
         chBits = state[1][stimCh[0]]
-        self.stimChs.clear()
-        chBinary = str("{0:b}".format(chBits))
+        testStimChs = []
+        chBinary = '{0:08b}'.format(chBits)
         for b in range(len(chBinary)): #32 bit state
           if chBinary[len(chBinary) - b - 1] == '1':
             #print(self.chNames[b] + " at " + str(b))
-            self.stimChs.append(self.chNames[b]) #append ch name
+            testStimChs.append(self.chNames[b]) #append ch name
+        #minimally change used array
+        if testStimChs != self.stimChs:
+          self.stimChs = testStimChs
 
   
   def plot(self, data):
@@ -260,7 +263,7 @@ class CCEPFilter(GridFilter):
 
             #get chunks by peaks
             #hard code parameters just to test
-            peaks, properties = find_peaks(self.trigData, 200, width=(None,20), threshold=20, distance=10)
+            peaks, properties = find_peaks(self.trigData, 200, width=(None,20), threshold=20, distance=20)
             print(f"Found {len(peaks)} peaks")
             if len(peaks) <= 1:
               chunk = False

@@ -202,7 +202,7 @@ class BCI2000DataThread(AbstractDataThread):
 
           elif msg.kind == 'Signal' and msg.sourceID == 'States':
             #round incoming signal to nearest int
-            self.stateSignal.emit(np.round(self.receiveSignal(msg)))
+            self.stateSignal.emit(np.rint(self.receiveSignal(msg)).astype(np.int64))
             pass
 
           elif msg.kind == 'SysCommand' and msg.command == 'EndOfData':
