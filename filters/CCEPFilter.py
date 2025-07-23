@@ -218,7 +218,7 @@ class CCEPFilter(GridFilter):
     self.numTrigs += triggersFound
 
     #find stim ch if possible
-    if triggersFound > 0:
+    if np.shape(state)[0] > 1 and triggersFound:
       stimCh = state[SharedStates.StimulatingChannel].nonzero()[0]
       if stimCh.any():
         #just get first non-zero value
