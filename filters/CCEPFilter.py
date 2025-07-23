@@ -7,7 +7,7 @@ from pyqtgraph.dockarea import *
 import pyqtgraph.parametertree as ptree
 from filters.filterBase.GridFilter import GridFilter
 from base.SharedVisualization import saveFigure
-from enum import Enum
+from enum import Enum, IntEnum, auto
 from scipy.signal import find_peaks
 from math import ceil
 
@@ -23,6 +23,9 @@ class Column(Enum):
 class RefCombo(Enum):
   Average = 0
   Maximum = 1
+class SharedStates(IntEnum):
+  CCEPTriggered        = 0
+  StimulatingChannel   = auto() # Auto-increment
 
 
 class FigureParameterItem(ptree.parameterTypes.WidgetParameterItem):
@@ -211,14 +214,15 @@ class CCEPFilter(GridFilter):
   #define abstract methods
   def receiveStates(self, state):
     #get CCEPTriggered state to detect CCEPs
-    self.numTrigs += np.count_nonzero(state[0])
+    triggersFound = np.count_nonzero(state[SharedStates.CCEPTriggered])
+    self.numTrigs += triggersFound
 
     #find stim ch if possible
-    if np.shape(state)[0] > 1:
-      stimCh = state[1].nonzero()[0]
+    if triggersFound > 0:
+      stimCh = state[SharedStates.StimulatingChannel].nonzero()[0]
       if stimCh.any():
         #just get first non-zero value
-        chBits = state[1][stimCh[0]]
+        chBits = state[SharedStates.StimulatingChannel][stimCh[0]]
         testStimChs = []
         chBinary = '{0:08b}'.format(chBits)
         for b in range(len(chBinary)): #32 bit state
