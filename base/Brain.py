@@ -136,7 +136,7 @@ class BrainWindow(Group):
     self.scaleSlider.setMaximum(99)
     self.scaleSlider.setMinimum(0)
     self.scaleSlider.valueChanged.connect(self.changeScale)
-    self.scaleMap = np.linspace(1e-3, 80e-3, 100)
+    self.scaleMap = np.linspace(1e-3, 500e-3, 100)
 
     self.themes = [ColorScheme('black', [1,1,1,1], [0.3, 0.3, 0.3, 1]), #dark
                    ColorScheme('w', [0,0,0,0], [0.6, 0.6, 0.6, 1])]     #light

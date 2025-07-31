@@ -8,7 +8,7 @@ import pyqtgraph.parametertree as ptree
 from filters.filterBase.GridFilter import GridFilter
 from base.SharedVisualization import saveFigure
 from enum import Enum
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, butter, filtfilt
 from math import ceil
 
 backgroundColor = (14, 14, 14)
@@ -23,6 +23,14 @@ class Column(Enum):
 class RefCombo(Enum):
   Average = 0
   Maximum = 1
+
+class Filter():
+  enabled = False
+  cutOff = None
+  b = 0
+  a = 0
+  def __init__(self, name):
+    self.type = name
 
 
 class FigureParameterItem(ptree.parameterTypes.WidgetParameterItem):
@@ -84,7 +92,25 @@ class ScalableGroup(ptree.parameterTypes.GroupParameter):
           listStr += ", " + str(el)
       else:
         listStr = ""
-      self.selTextBox.setValue(listStr)  
+      self.selTextBox.setValue(listStr)
+
+class FilterParams(ptree.parameterTypes.GroupParameter):
+  def __init__(self, p, **opts):
+    self.p = p
+    ptree.parameterTypes.GroupParameter.__init__(self, **opts)
+
+    self.lp = ptree.parameterTypes.ListParameter(name="Low Pass", limits= [None, 30, 40, 70])
+    #self.lp.sigValueChanged.connect(self.p.filterChanged)
+    self.addChild(self.lp)
+
+    self.hp = ptree.parameterTypes.ListParameter(name="High Pass", limits= [None, 0.1, 1, 5])
+    #self.hp.sigValueChanged.connect(self.p.filterChanged)
+    self.addChild(self.hp)
+
+    self.notch = ptree.parameterTypes.ListParameter(name="Notch", limits= [None, 50, 60])
+    #self.notch.sigValueChanged.connect(self.p.filterChanged)
+    self.addChild(self.notch)
+
 
 class TestBooleanParams(ptree.parameterTypes.GroupParameter):
   def __init__(self, p, **opts):
@@ -154,8 +180,10 @@ class CCEPFilter(GridFilter):
 
     #create parameter tree
     self.autoParam = ScalableGroup(name="Auto Detect Options", p=self, tip='Click to add channels', readonly=False)
+    self.filterParams = FilterParams(name="Filters", p=self)
     params = [
         TestBooleanParams(name= 'General Options', p=self, showTop=False),
+        self.filterParams,
         self.autoParam
     ]
 
@@ -179,10 +207,10 @@ class CCEPFilter(GridFilter):
     self._maskStart = self.settings.value("maskStart", -5)
     self._maskEnd = self.settings.value("maskEnd", 15)
 
-    pState = self.settings.value("pState", {})
+    #pState = self.settings.value("pState", {})
 
-    if pState != {}:
-      self.p.restoreState(pState, addChildren=False, removeChildren=False)
+    #if pState != {}:
+    #  self.p.restoreState(pState, addChildren=False, removeChildren=False)
     self._maxWindows = self.p.child('General Options')['Max Windows']
     self._sortChs = self.p.child('General Options')['Sort channels']
     self._comboOpt = RefCombo[self.p.child('Auto Detect Options')['Combination Options']]
@@ -233,7 +261,7 @@ class CCEPFilter(GridFilter):
   def plot(self, data):
     #if self.checkPlot():
     if self.numTrigs > 0:
-      print("plotting")
+      print(f"plotting {self.numTrigs}")
       self.numTrigs -= 1
 
       #process data
@@ -324,6 +352,11 @@ class CCEPFilter(GridFilter):
 
     #to visualize stimulating channels if we can
     self.stimChs = []
+    #for filters
+    self.filters = { 'Notch':  Filter('bandstop'), 'Low Pass': Filter('lowpass'), 'High Pass':  Filter('highpass')}
+    self.filterValChanged = False
+    for param in self.filterParams.children():
+      param.sigValueChanged.connect(self.filterChanged)
 
     #go thru all channels for table
     count = 0
@@ -463,6 +496,38 @@ class CCEPFilter(GridFilter):
     for t in self.chTable.values():
       t.totalChanged(0)
       t.database = []
+      t.rawDatabase = []
+  
+  def filterChanged(self, param, val):
+    filter = self.filters[param.name()]
+    #if val != filter.cutOff:
+    filter.cutOff = val
+    filter.enabled = val != None
+    if filter.enabled:
+      print("filter enabled")
+      if filter.type == 'bandstop':
+        f = np.array([filter.cutOff - 5, filter.cutOff + 5])
+      else:
+        f = filter.cutOff
+      filter.b, filter.a = butter(2, f * 2 / self.sr , btype=filter.type)
+
+    #change past data
+    for ch in self.chTable.values():
+      for i in range(np.size(ch.rawDatabase, 0)):
+        ch.database[i] = ch.filterData(ch.rawDatabase[i])
+      ch.data = np.mean(ch.database, axis=0)
+    #display changes
+    print("changing data")
+    self.filterValChanged = True
+    self._renderPlots()
+    self.filterValChanged = False
+
+  def lpChanged(self, p, val):
+    print(val)
+  def hpChanged(self, p, val):
+    print(val)
+  def notchChanged(self, p, val):
+    print(val)
 
   def saveFigures(self):
     #beautiful hack
@@ -502,7 +567,9 @@ class CCEPFilter(GridFilter):
         break
       if not self.table.isRowHidden(r):
         chName = self.table.item(r, Column.Name.value).text()
-        self.chPlot[i].changePlot(chName, self.chTable[chName])
+        chng = self.chPlot[i].checkForChange(chName, self.chTable[chName])
+        if chng or self.filterValChanged:
+          self.chPlot[i].changePlot()
         self.chPlot[i].plotData(newData)
         i+=1
 
@@ -636,24 +703,27 @@ class CCEPPlot(pg.PlotItem):
       self.p.updateParameter(self.latLow, self.latHigh) 
       self.friend.latReg.setRegion(reg.getRegion())
   
-  def changePlot(self, name, link):
+  def checkForChange(self, name, link):
     #have we changed channels
     if self.name != name:
       self.setTitle(name)
       self.name = name
       self.link = link #update link
-      if len(self.link.database) > 0:
-        #change data of all plots but average
-        for f, d in zip(self.listDataItems()[1:], self.link.database):
-          f.setData(x=self.p.x, y=d, useCache=True)
+      return True
+  def changePlot(self):
+    if len(self.link.database) > 0:
+      #change data of all plots but average
+      for f, d in zip(self.listDataItems()[1:], self.link.database):
+        f.setData(x=self.p.x, y=d, useCache=True)
+      self.updateAveragePlot()
 
-      #change background based on selected
-      if self.selected and not self.link.selected:
-        self.vb.setBackgroundColor(backgroundColor)
-        self.selected = False
-      elif not self.selected and self.link.selected:
-        self.vb.setBackgroundColor(highlightColor)
-        self.selected = True
+    #change background based on selected
+    if self.selected and not self.link.selected:
+      self.vb.setBackgroundColor(backgroundColor)
+      self.selected = False
+    elif not self.selected and self.link.selected:
+      self.vb.setBackgroundColor(highlightColor)
+      self.selected = True
 
   #plot: new name and link is only considered if we are dynamically sorting
   def plotData(self, newData, maxPlots=0):
@@ -674,7 +744,10 @@ class CCEPPlot(pg.PlotItem):
       #plot new data
       p2 = 255*(1-2.5**(-1*(1-1/(len(self.link.database)+1))))
       self.plot(x=self.p.x, y=self.link.database[-1], useCache=True, pen=self.p.pens[int(p2)], _callSync='off')
+
+      self.updateAveragePlot()
     
+  def updateAveragePlot(self):
     #update average plot
     if self.link.significant:
       p = pg.mkPen('y', width=1.5) #ccep!
@@ -688,10 +761,12 @@ class CCEPCalc():
   def __init__(self, parent, ch, title):
     self.p = parent
     self.ch = ch
+    self.name = title
 
     self.significant = False
     self.selected = False
     self.database = []
+    self.rawDatabase = []
     self.auc = 0
     self.data = np.zeros(self.p.elements)
 
@@ -730,10 +805,19 @@ class CCEPCalc():
       #stdBase = np.std(self.rawData[:self.p.baseSamples], dtype=np.float64)
       self.data = np.subtract(newData, avBase)
 
+
     if np.shape(self.data) != np.shape(self.p.x):
       self.p.logPrint(f"Expected: {np.shape(self.p.x)}, received: {np.shape(self.data)}")
     else:
       #store data
+      self.rawDatabase.append(self.data.copy())
+
+      #filter if enabled
+      self.data = self.filterData(self.data)
+      # for filter in self.p.filters:
+      #   if filter.enabled:
+      #     self.data = filtfilt(filter.b, filter.a, self.data)
+
       self.database.append(self.data.copy())
 
     #possibly change to average, before we detect ccep
@@ -745,6 +829,12 @@ class CCEPCalc():
     ccepData = self.getActiveData(self.data)
     normData = ccepData - np.mean(ccepData)
     self.auc = np.trapz(abs(normData))/1e3
+
+  def filterData(self, data):
+    for filter in self.p.filters.values():
+      if filter.enabled:
+        data = filtfilt(filter.b, filter.a, data)
+    return data
 
   def chunkData(self, newData, peaks, avgPlots=True):
     for peak in peaks:
