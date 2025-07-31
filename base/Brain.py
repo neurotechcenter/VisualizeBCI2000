@@ -263,9 +263,9 @@ class BrainWindow(Group):
       self.readyForConfig()
 
   def plot(self, data):
-    print("plotting brain...")
     if not self.activeEls:
       return
+    print("plotting brain...")
     for name, i in zip(self.activeEls, range(len(self.prevRadius))):
       dr = data[i] * self.scaleMap[self._scale]  / self.prevRadius[i]
       if dr == 0:
